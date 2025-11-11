@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ALERtick</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gruppo&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Setup Screen -->
+  <div id="setup-screen" class="screen" style="display: none;">
+    <div class="container">
+      <div class="card">
+        <h1 class="logo"><span class="bell-icon">📉</span> ALERtick<span class="beta-label">BETA</span></h1>
+        <h2>Welcome! Let's Get Started</h2>
+        <p class="subtitle">Enter your Uptick API token to begin generating reports.</p>
+        
+        <div id="setup-error" class="error" style="display: none;"></div>
+        
+        <form id="setup-form">
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required placeholder="you@company.com">
+          </div>
+          
+          <div class="form-group">
+            <label for="api-token">Uptick API Token</label>
+            <input type="text" id="api-token" name="api-token" required placeholder="Your API token">
+            <small>Get your token at <a href="https://dashboard.uptick.com/user/edit" target="_blank">dashboard.uptick.com/user/edit</a></small>
+          </div>
+          
+          <button type="submit" id="setup-btn" class="btn btn-primary">
+            Continue
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Screen -->
+  <div id="report-screen" class="screen" style="display: none;">
+    <header>
+      <div class="container">
+        <div class="header-bar">
+          <h1 class="logo"><span class="bell-icon">📉</span> ALERtick<span class="beta-label">BETA</span></h1>
+          <button id="logout-btn" class="btn btn-secondary">Logout</button>
+        </div>
+      </div>
+    </header>
+    
+    <nav class="nav-bar">
+      <div class="container">
+        <ul class="nav-list">
+          <li class="nav-item active">
+            <a href="#" class="nav-link" data-report="weekly-variance">Weekly Variance Report</a>
+          </li>
+          <li class="nav-item">
+            <a href="#" class="nav-link" data-report="low-rpv">Low RPV Alert</a>
+          </li>
+          <li class="nav-item">
+            <a href="#" class="nav-link" data-report="no-activity">No Activity Alert</a>
+          </li>
+        </ul>
+      </div>
+    </nav>
+    
+    <div class="container">
+      <div class="card">
+        <div class="report-header">
+          <div>
+            <h2 id="report-title">Weekly RPV Variance Report</h2>
+            <p id="report-subtitle" class="subtitle">Publisher sites with >10% RPV (Revenue Per View) variation between weeks (last 3 complete weeks)</p>
+          </div>
+          <button id="refresh-btn" class="btn btn-secondary">🔄 Refresh</button>
+        </div>
+        
+        <div id="report-container">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading report data...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="screen">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Initializing...</p>
+    </div>
+  </div>
+
+  <script src="app.js?v=3"></script>
+</body>
+</html>
