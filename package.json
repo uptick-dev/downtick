@@ -15,7 +15,7 @@
   "license": "Proprietary",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sixcupsofcoffee/downtick.git"
+    "url": "https://github.com/uptick-dev/downtick.git"
   },
   "dependencies": {
     "axios": "^1.6.2",
@@ -32,7 +32,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "sixcupsofcoffee",
+        "owner": "uptick-dev",
         "repo": "downtick"
       }
     ],
