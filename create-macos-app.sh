@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Creates a self-contained macOS .app bundle for Uptick Reporter
+# Creates a self-contained macOS .app bundle for Downtick
 set -e
 
-APP_NAME="Uptick Reporter"
-BUNDLE_ID="com.yourcompany.uptick-reporter"
+APP_NAME="Downtick"
+BUNDLE_ID="com.yourcompany.downtick"
 VERSION="1.0.0"
 
 echo "📦 Creating macOS app bundle: $APP_NAME.app"
@@ -55,31 +55,31 @@ cd "$APP_DIR"
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
-    osascript -e 'display dialog "Node.js is required to run Uptick Reporter.\n\nPlease install Node.js from:\nhttps://nodejs.org\n\nOr via Homebrew:\nbrew install node" buttons {"OK"} default button "OK" with icon stop with title "Uptick Reporter"'
+    osascript -e 'display dialog "Node.js is required to run Downtick.\n\nPlease install Node.js from:\nhttps://nodejs.org\n\nOr via Homebrew:\nbrew install node" buttons {"OK"} default button "OK" with icon stop with title "Downtick"'
     exit 1
 fi
 
 # Check Node version
 NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
 if [ "$NODE_VERSION" -lt 14 ]; then
-    osascript -e 'display dialog "Node.js 14 or higher is required.\n\nYour version: '"$(node -v)"'\n\nPlease update Node.js from:\nhttps://nodejs.org" buttons {"OK"} default button "OK" with icon stop with title "Uptick Reporter"'
+    osascript -e 'display dialog "Node.js 14 or higher is required.\n\nYour version: '"$(node -v)"'\n\nPlease update Node.js from:\nhttps://nodejs.org" buttons {"OK"} default button "OK" with icon stop with title "Downtick"'
     exit 1
 fi
 
 # Check if already running
 if lsof -Pi :3737 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    osascript -e 'display dialog "Uptick Reporter is already running!" buttons {"Open Browser", "OK"} default button "Open Browser" with title "Uptick Reporter"' | grep "Open Browser" && open http://localhost:3737
+    osascript -e 'display dialog "Downtick is already running!" buttons {"Open Browser", "OK"} default button "Open Browser" with title "Downtick"' | grep "Open Browser" && open http://localhost:3737
     exit 0
 fi
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then
-    osascript -e 'display notification "Installing dependencies..." with title "Uptick Reporter"'
+    osascript -e 'display notification "Installing dependencies..." with title "Downtick"'
     
     # Run npm install in Terminal so user can see progress
     osascript <<EOF
     tell application "Terminal"
-        do script "cd '$APP_DIR' && echo 'Installing dependencies...' && npm install && echo '\nStarting Uptick Reporter...' && node launcher.js"
+        do script "cd '$APP_DIR' && echo 'Installing dependencies...' && npm install && echo '\nStarting Downtick...' && node launcher.js"
         activate
     end tell
 EOF

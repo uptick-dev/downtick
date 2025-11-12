@@ -1,7 +1,7 @@
 {
-  "name": "alertick",
+  "name": "downtick",
   "version": "0.0.5",
-  "description": "ALERtick - Uptick Analytics Reporter",
+  "description": "Downtick - Analytics Reporter",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -11,11 +11,11 @@
     "build:electron-universal": "electron-builder --mac --universal",
     "publish": "electron-builder --mac --publish always"
   },
-  "author": "John Bell @ Uptick",
+  "author": "John Bell",
   "license": "Proprietary",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sixcupsofcoffee/alertick.git"
+    "url": "https://github.com/sixcupsofcoffee/downtick.git"
   },
   "dependencies": {
     "axios": "^1.6.2",
@@ -27,13 +27,13 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.yourcompany.alertick",
-    "productName": "ALERtick",
+    "appId": "com.yourcompany.downtick",
+    "productName": "Downtick",
     "publish": [
       {
         "provider": "github",
         "owner": "sixcupsofcoffee",
-        "repo": "alertick"
+        "repo": "downtick"
       }
     ],
     "mac": {

@@ -1,6 +1,6 @@
-# Uptick Reporter - Complete Guide
+# Downtick - Complete Guide
 
-A self-contained desktop application for generating weekly variance reports from the Uptick API.
+A self-contained desktop application for generating weekly variance reports.
 
 ## Table of Contents
 
@@ -19,10 +19,10 @@ A self-contained desktop application for generating weekly variance reports from
 
 ### For End Users
 
-1. Download `ALERtick.app` (or extract from .zip)
+1. Download `Downtick.app` (or extract from .zip)
 2. Double-click to open
 3. If macOS blocks it: Right-click → Open
-4. Enter your API token from https://dashboard.uptick.com/user/edit
+4. Enter your API token
 5. View your reports
 
 **System Requirements:**
@@ -33,7 +33,7 @@ A self-contained desktop application for generating weekly variance reports from
 
 ```bash
 # Clone and install
-cd /path/to/uptick-reporter-electron
+cd /path/to/downtick
 npm install
 
 # Run in development
@@ -48,7 +48,7 @@ npm run build:electron
 ## Features
 
 - **Weekly Variance Report**: Identifies publisher sites with >10% week-over-week variance
-- **Real-time Data**: Fetches directly from Uptick API
+- **Real-time Data**: Fetches directly from API
 - **Secure Token Storage**: Encrypted locally using AES-256
 - **Self-Contained**: Everything bundled in a single .app file
 - **Auto-Updates**: Automatic update checking via GitHub Releases
@@ -67,7 +67,7 @@ npm run build:electron
 ### Project Structure
 
 ```
-uptick-reporter-electron/
+downtick/
 ├── main.js                   # Electron main process
 ├── standalone-server.js      # Express backend + API logic
 ├── package.json              # Dependencies & build config
@@ -83,7 +83,7 @@ uptick-reporter-electron/
 
 1. Electron app starts Express server on localhost:3737
 2. JSON file stores encrypted tokens locally
-3. Axios fetches data from Uptick API
+3. Axios fetches data from API
 4. Frontend displays reports in web UI
 
 ### Development Commands
@@ -131,8 +131,8 @@ npm run publish
 ```
 
 **Output Files:**
-- `dist/ALERtick-{version}-mac.zip` - Intel Mac build
-- `dist/ALERtick-{version}-arm64-mac.zip` - Apple Silicon build
+- `dist/Downtick-{version}-mac.zip` - Intel Mac build
+- `dist/Downtick-{version}-arm64-mac.zip` - Apple Silicon build
 - `dist/latest-mac.yml` - Update metadata
 
 ### Distribution Methods
@@ -157,13 +157,13 @@ Creates traditional macOS app bundle (requires Node.js on user's machine)
 
 **From GitHub Release:**
 1. Download the appropriate .zip file:
-   - Intel Mac: `ALERtick-{version}-mac.zip`
-   - Apple Silicon: `ALERtick-{version}-arm64-mac.zip`
+   - Intel Mac: `Downtick-{version}-mac.zip`
+   - Apple Silicon: `Downtick-{version}-arm64-mac.zip`
 2. Extract the .zip file
 3. Move app to Applications folder
 4. Open the app
 5. If blocked by security: Right-click → Open
-6. Enter Uptick API token on first run
+6. Enter API token on first run
 
 ---
 
@@ -221,7 +221,7 @@ npm run publish
 ### How Updates Work
 
 1. App checks for updates 3 seconds after launch
-2. Users can manually check via menu: "ALERtick → Check for Updates..."
+2. Users can manually check via menu: "Downtick → Check for Updates..."
 3. Update notification appears with version number
 4. User clicks "Download Update"
 5. Progress bar shows download status
@@ -282,7 +282,7 @@ If no "Developer ID Application" certificate exists:
 
 1. Go to https://appleid.apple.com/account/manage
 2. Security → App-Specific Passwords
-3. Generate password labeled "ALERtick Notarization"
+3. Generate password labeled "Downtick Notarization"
 4. Copy the password (format: `xxxx-xxxx-xxxx-xxxx`)
 
 #### 4. Set Environment Variables
@@ -313,10 +313,10 @@ This will:
 
 ```bash
 # Extract built app
-unzip dist/ALERtick-{version}-mac.zip
+unzip dist/Downtick-{version}-mac.zip
 
 # Check notarization status
-spctl -a -vv ALERtick.app
+spctl -a -vv Downtick.app
 ```
 
 Should show: `source=Notarized Developer ID`
@@ -338,13 +338,13 @@ Should show: `source=Notarized Developer ID`
 ### Security
 
 - **Token Encryption**: AES-256-CBC with random IV
-- **Local Storage**: JSON file in `~/Library/Application Support/Uptick Reporter/`
+- **Local Storage**: Data stored in `~/Library/Application Support/Downtick/`
 - **No External Servers**: All data stays on user's machine
 - **HTTPS Only**: All API calls use HTTPS
 
 ### Data Storage
 
-**Location:** `~/Library/Application Support/Uptick Reporter/`
+**Location:** `~/Library/Application Support/Downtick/`
 
 **Files:**
 - `user-data.json` - Encrypted API tokens
@@ -354,7 +354,7 @@ Should show: `source=Notarized Developer ID`
 ### Dependencies
 
 - **express**: Web server
-- **axios**: HTTP client for Uptick API
+- **axios**: HTTP client for API
 - **electron**: Desktop app framework
 - **electron-updater**: Auto-update functionality
 - **Node.js built-ins**: crypto, fs, path
@@ -375,8 +375,8 @@ lsof -ti:3737 | xargs kill
 ```
 
 **"Invalid API token"**
-- Get fresh token from https://dashboard.uptick.com/user/edit
-- Delete `~/Library/Application Support/Uptick Reporter/user-data.json`
+- Get fresh token from your dashboard
+- Delete `~/Library/Application Support/Downtick/user-data.json`
 
 **Build fails**
 ```bash
@@ -408,7 +408,7 @@ echo $APPLE_APP_SPECIFIC_PASSWORD
 security find-identity -v -p codesigning
 
 # Verify notarization
-spctl -a -vv ALERtick.app
+spctl -a -vv Downtick.app
 
 # Check version
 cat package.json | grep version
@@ -418,7 +418,7 @@ cat package.json | grep version
 
 To completely reset the app:
 ```bash
-rm -rf ~/Library/Application\ Support/Uptick\ Reporter/
+rm -rf ~/Library/Application\ Support/Downtick/
 ```
 
 ---
@@ -460,8 +460,8 @@ rm -rf ~/Library/Application\ Support/Uptick\ Reporter/
 
 ## Installation
 Download the appropriate file for your Mac:
-- Intel Macs: ALERtick-X.X.X-mac.zip
-- Apple Silicon: ALERtick-X.X.X-arm64-mac.zip
+- Intel Macs: Downtick-X.X.X-mac.zip
+- Apple Silicon: Downtick-X.X.X-arm64-mac.zip
 ```
 
 ---

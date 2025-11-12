@@ -4,7 +4,7 @@ const { spawn, exec } = require('child_process');
 const path = require('path');
 const { app: electronApp } = process.versions.electron ? require('electron') : { app: null };
 
-console.log('\n🚀 Starting Uptick Reporter...\n');
+console.log('\n🚀 Starting Downtick...\n');
 
 // Determine data directory
 let userDataPath;
@@ -12,11 +12,11 @@ if (electronApp) {
   userDataPath = electronApp.getPath('userData');
 } else {
   const os = require('os');
-  userDataPath = path.join(os.homedir(), 'Library', 'Application Support', 'Uptick Reporter');
+  userDataPath = path.join(os.homedir(), 'Library', 'Application Support', 'Downtick');
 }
 
 // Set environment variable for server
-process.env.UPTICK_DATA_PATH = userDataPath;
+process.env.DOWNTICK_DATA_PATH = userDataPath;
 
 // Start the server
 const serverPath = path.join(__dirname, 'standalone-server.js');

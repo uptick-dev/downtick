@@ -13,8 +13,8 @@ let cachePath;
 let ENCRYPTION_KEY;
 
 // Get data path from environment or use default
-const DATA_DIR = process.env.UPTICK_DATA_PATH || 
-  path.join(os.homedir(), 'Library', 'Application Support', 'Uptick Reporter');
+const DATA_DIR = process.env.DOWNTICK_DATA_PATH || 
+  path.join(os.homedir(), 'Library', 'Application Support', 'Downtick');
 
 // Middleware
 app.use(express.json());

@@ -184,7 +184,7 @@ function createWindow() {
       contextIsolation: true
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
-    title: 'ALERtick'
+    title: 'Downtick'
   });
 
   // Load the local server
