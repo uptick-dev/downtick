@@ -1,6 +1,6 @@
 {
   "name": "alertick",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "ALERtick - Uptick Analytics Reporter",
   "main": "main.js",
   "scripts": {
@@ -38,7 +38,13 @@
     ],
     "mac": {
       "category": "public.app-category.business",
-      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "M3Q9SM4LDD"
+      },
       "target": [
         {
           "target": "zip",

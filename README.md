@@ -90,6 +90,8 @@ npm run build:mac
 
 - **`AUTO_UPDATE_GUIDE.md`** - Complete guide to setting up GitHub Releases auto-updates
 - **`RELEASE_CHECKLIST.md`** - Quick reference for publishing new versions
+- **`NOTARIZATION_SETUP.md`** - Complete guide to code signing and notarization
+- **`NOTARIZATION_CHECKLIST.md`** - Quick checklist for notarization setup
 - **`DISTRIBUTION_GUIDE.md`** - Distribution methods and user instructions
 - **`ELECTRON_BUILD_GUIDE.md`** - Electron Builder configuration details
 
