@@ -39,6 +39,9 @@ npm install
 # Run in development
 npm start
 
+# Build for testing
+npm run build:electron-unsigned 
+
 # Build for distribution
 npm run build:electron
 ```
@@ -78,13 +81,6 @@ downtick/
 └── build/
     └── entitlements.mac.plist
 ```
-
-### How It Works
-
-1. Electron app starts Express server on localhost:3737
-2. JSON file stores encrypted tokens locally
-3. Axios fetches data from API
-4. Frontend displays reports in web UI
 
 ### Development Commands
 

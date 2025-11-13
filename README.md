@@ -5,24 +5,28 @@ A self-contained desktop application for generating weekly variance reports.
 ## Features
 
 - **Weekly Variance Report**: Identifies publisher sites with >10% week-over-week variance
-- **Real-time Data**: Fetches directly from API
+- **Low RPV Alerts**: Identifies publisher sites with <$0.20 RPV
+- **No Activity Alerts**: Identifies publisher sites with views last week but no views yesterday.
+- **Real-time Data**: Fetches directly from API; cached daily but can be refreshed
 - **Secure Token Storage**: Encrypted locally using AES-256
 - **Self-Contained**: Everything bundled in a single .app file
-- **Auto-Updates**: Automatic update checking via GitHub Releases
+- **Auto-Updates**: Automatic updates
 
 ## Quick Start
 
 ### For End Users
 
-1. Download and extract `Downtick.app` from .zip
-2. Double-click to open
-3. If macOS blocks it: Right-click → Open
-4. Enter your API token
+1. Choose your version from the [releases](https://github.com/uptick-dev/downtick/releases) page; arm-64 for M1 Macs or later, otherwise choose the standard version
+2. Download and extract `Downtick.app` from .zip
+3. Double-click to open
+4. Enter your Uptick email and API token
 5. View your reports
 
 **System Requirements:** macOS 10.13 or higher
 
 ### For Developers
+
+Note: this requires codesigning and notarization from Apple. See [GUIDE.md](GUIDE.md) for more information.
 
 ```bash
 # Install and run

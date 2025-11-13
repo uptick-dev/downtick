@@ -9,6 +9,7 @@
     "build:mac": "./create-macos-app.sh",
     "build:electron": "electron-builder --mac",
     "build:electron-universal": "electron-builder --mac --universal",
+    "build:electron-unsigned": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "publish": "electron-builder --mac --publish always"
   },
   "author": "John Bell",

@@ -5,6 +5,7 @@ const path = require('path');
 let mainWindow;
 let serverModule;
 let serverPort = 3737;
+let isManualUpdateCheck = false;
 
 // Configure auto-updater
 autoUpdater.autoDownload = false;
@@ -32,7 +33,8 @@ autoUpdater.on('update-available', (info) => {
 
 autoUpdater.on('update-not-available', () => {
   console.log('No updates available');
-  if (mainWindow) {
+  // Only show dialog if this was a manual check
+  if (mainWindow && isManualUpdateCheck) {
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'No Updates',
@@ -40,6 +42,8 @@ autoUpdater.on('update-not-available', () => {
       buttons: ['OK']
     });
   }
+  // Reset the flag
+  isManualUpdateCheck = false;
 });
 
 autoUpdater.on('download-progress', (progressObj) => {
@@ -110,6 +114,7 @@ function createMenu() {
         {
           label: 'Check for Updates...',
           click: () => {
+            isManualUpdateCheck = true;
             autoUpdater.checkForUpdates();
           }
         },
@@ -213,6 +218,7 @@ app.whenReady().then(async () => {
     // Check for updates on startup (silently)
     if (!process.argv.includes('--dev')) {
       setTimeout(() => {
+        isManualUpdateCheck = false;
         autoUpdater.checkForUpdates();
       }, 3000);
     }
