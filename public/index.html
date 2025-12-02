@@ -8,13 +8,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gruppo&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
   <!-- Setup Screen -->
   <div id="setup-screen" class="screen" style="display: none;">
     <div class="container">
       <div class="card">
-        <h1 class="logo"><span class="bell-icon">📉</span> Downtick<span class="beta-label">BETA</span></h1>
+        <h1 class="logo"><img src="downtick_logo.png" alt="Downtick" class="logo-banner"></h1>
         <h2>Welcome! Let's Get Started</h2>
         <p class="subtitle">Enter your API token to begin generating reports.</p>
         
@@ -45,8 +47,7 @@
     <header>
       <div class="container">
         <div class="header-bar">
-          <h1 class="logo"><span class="bell-icon">📉</span> Downtick<span class="beta-label">BETA</span></h1>
-          <button id="logout-btn" class="btn btn-secondary">Logout</button>
+          <h1 class="logo"><img src="downtick_logo.png" alt="Downtick" class="logo-banner"></h1>
         </div>
       </div>
     </header>
@@ -58,12 +59,16 @@
             <a href="#" class="nav-link" data-report="weekly-variance">Weekly Variance Report</a>
           </li>
           <li class="nav-item">
+            <a href="#" class="nav-link" data-report="monthly-variance">Monthly Variance Report</a>
+          </li>
+          <li class="nav-item">
             <a href="#" class="nav-link" data-report="low-rpv">Low RPV Alert</a>
           </li>
           <li class="nav-item">
             <a href="#" class="nav-link" data-report="no-activity">No Activity Alert</a>
           </li>
         </ul>
+        <button id="logout-btn" class="btn btn-secondary btn-sm">Logout</button>
       </div>
     </nav>
     
@@ -74,7 +79,15 @@
             <h2 id="report-title">Weekly RPV Variance Report</h2>
             <p id="report-subtitle" class="subtitle">Publisher sites with >10% RPV (Revenue Per View) variation between weeks (last 3 complete weeks)</p>
           </div>
-          <button id="refresh-btn" class="btn btn-secondary">🔄 Refresh</button>
+          <div class="report-actions">
+            <div id="threshold-control" class="threshold-control" style="display: none;">
+              <label for="threshold-input">Threshold:</label>
+              <input type="number" id="threshold-input" min="1" max="100" value="10" step="1">
+              <span class="threshold-suffix">%</span>
+            </div>
+            <button id="download-pdf-btn" class="btn btn-secondary btn-sm" style="display: none;">📄 Download PDF</button>
+            <button id="refresh-btn" class="btn btn-secondary btn-sm">🔄 Refresh</button>
+          </div>
         </div>
         
         <div id="report-container">
@@ -95,6 +108,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

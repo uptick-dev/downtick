@@ -218,6 +218,117 @@ class UptickAPI {
     }
   }
 
+  async fetchMonthlyData(monthsAgo, isCurrentMonth = false) {
+    // Calculate monthly date ranges
+    // monthsAgo = 0: current month to date (1st of month to yesterday)
+    // monthsAgo = 1: last complete month
+    // monthsAgo = 2: 2 months ago (complete)
+    // monthsAgo = 3: 3 months ago (complete)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    let startDate, endDate;
+    
+    if (isCurrentMonth) {
+      // Current month: 1st of this month to yesterday
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      endDate = new Date(today);
+      endDate.setDate(endDate.getDate() - 1); // Yesterday
+    } else {
+      // Complete month: monthsAgo months back
+      const targetMonth = new Date(today.getFullYear(), today.getMonth() - monthsAgo, 1);
+      startDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
+      endDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0); // Last day of month
+    }
+
+    const dateRange = {
+      start: startDate.toISOString().split('T')[0],
+      end: endDate.toISOString().split('T')[0],
+      isCurrentMonth
+    };
+
+    // If start date is after end date (e.g., 1st of month and today is the 1st), return empty
+    if (startDate > endDate) {
+      return {
+        success: true,
+        dateRange,
+        data: { data: [], total_records: 0, pages_fetched: 0 }
+      };
+    }
+
+    const baseParams = {
+      date_range: 'custom',
+      date_from: startDate.toISOString().split('T')[0],
+      date_to: endDate.toISOString().split('T')[0],
+      pivot: 'Day',
+      sort_field: 'impressions',
+      sort_order: 'desc'
+    };
+
+    try {
+      let allData = [];
+      let page = 1;
+      let hasMorePages = true;
+      const maxPages = 100;
+      let lastResponse;
+
+      while (hasMorePages && page <= maxPages) {
+        const params = new URLSearchParams({
+          ...baseParams,
+          page: page.toString()
+        });
+
+        const response = await axios.get(`${this.baseURL}/?${params}`, {
+          headers: {
+            'Authorization': this.getAuthHeader(),
+            'Accept': 'application/json'
+          },
+          timeout: 30000
+        });
+
+        lastResponse = response;
+        const pageData = response.data.data || [];
+        
+        if (pageData.length === 0) {
+          hasMorePages = false;
+        } else {
+          allData = allData.concat(pageData);
+          console.log(`Monthly data page ${page}: ${pageData.length} records (total: ${allData.length})`);
+          
+          if (response.data.next_page === false || 
+              response.data.has_more === false ||
+              (response.data.total_pages && page >= response.data.total_pages)) {
+            hasMorePages = false;
+          } else {
+            page++;
+          }
+        }
+      }
+
+      console.log(`Monthly pagination complete: ${allData.length} total records from ${page - 1} pages`);
+      
+      // Process daily data into site-level aggregates for the month
+      const processedData = this.processDailyData(allData);
+      
+      return { 
+        success: true,
+        dateRange,
+        data: { 
+          ...lastResponse.data,
+          data: processedData,
+          total_records: processedData.length,
+          pages_fetched: page - 1
+        } 
+      };
+    } catch (error) {
+      return { 
+        success: false,
+        dateRange,
+        error: error.response?.data?.message || error.message 
+      };
+    }
+  }
+
   async fetchYesterdayData() {
     // Fetch data for yesterday only
     const today = new Date();
@@ -362,9 +473,9 @@ class UptickAPI {
 
 // Report Generator
 class ReportGenerator {
-  constructor(token) {
+  constructor(token, threshold = 10.0) {
     this.api = new UptickAPI(token);
-    this.threshold = 10.0;
+    this.threshold = threshold;
   }
 
   async generateVarianceReport() {
@@ -424,6 +535,9 @@ class ReportGenerator {
           week1Value: varianceData.week1Value,
           week2Value: varianceData.week2Value,
           week3Value: varianceData.week3Value,
+          week1Views: this.parseValue(weeks.week1.views),
+          week2Views: this.parseValue(weeks.week2.views),
+          week3Views: this.parseValue(weeks.week3.views),
           maxVariance: varianceData.maxVariance,
           metric
         });
@@ -442,6 +556,136 @@ class ReportGenerator {
         week3: week3.dateRange
       }
     };
+  }
+
+  async generateMonthlyVarianceReport() {
+    // Fetch 3 complete months + current month to date
+    const [month1, month2, month3, monthCurrent] = await Promise.all([
+      this.api.fetchMonthlyData(3),           // 3 months ago (complete)
+      this.api.fetchMonthlyData(2),           // 2 months ago (complete)
+      this.api.fetchMonthlyData(1),           // Last month (complete)
+      this.api.fetchMonthlyData(0, true)      // Current month to date
+    ]);
+
+    if (!month1.success || !month2.success || !month3.success || !monthCurrent.success) {
+      return {
+        error: month1.error || month2.error || month3.error || monthCurrent.error,
+        sites: []
+      };
+    }
+
+    const sitesMap = this.buildMonthsSitesMap(
+      month1.data.data || [],
+      month2.data.data || [],
+      month3.data.data || [],
+      monthCurrent.data.data || []
+    );
+
+    const sitesWithVariance = [];
+    const metric = 'publisher_rpv'; // Publisher Revenue Per View
+
+    for (const [siteName, months] of Object.entries(sitesMap)) {
+      // Require at least 3 months of data (month1, month2, month3) plus current month
+      if (!months.month1 || !months.month2 || !months.month3 || !months.monthCurrent) continue;
+
+      const varianceData = this.calculateMonthlyVariance(months, metric);
+      
+      if (Math.abs(varianceData.maxVariance) > this.threshold) {
+        sitesWithVariance.push({
+          siteName,
+          month1Value: varianceData.month1Value,
+          month2Value: varianceData.month2Value,
+          month3Value: varianceData.month3Value,
+          monthCurrentValue: varianceData.monthCurrentValue,
+          month1Views: this.parseValue(months.month1.views),
+          month2Views: this.parseValue(months.month2.views),
+          month3Views: this.parseValue(months.month3.views),
+          monthCurrentViews: this.parseValue(months.monthCurrent.views),
+          maxVariance: varianceData.maxVariance,
+          metric
+        });
+      }
+    }
+
+    sitesWithVariance.sort((a, b) => Math.abs(b.maxVariance) - Math.abs(a.maxVariance));
+
+    return {
+      generatedAt: new Date().toISOString(),
+      threshold: this.threshold,
+      sites: sitesWithVariance,
+      monthRanges: {
+        month1: month1.dateRange,
+        month2: month2.dateRange,
+        month3: month3.dateRange,
+        monthCurrent: monthCurrent.dateRange
+      }
+    };
+  }
+
+  buildMonthsSitesMap(month1Data, month2Data, month3Data, monthCurrentData) {
+    const sites = {};
+
+    for (const site of month1Data) {
+      const name = site.publisher_site || 'Unknown';
+      if (!sites[name]) sites[name] = {};
+      sites[name].month1 = site;
+    }
+
+    for (const site of month2Data) {
+      const name = site.publisher_site || 'Unknown';
+      if (!sites[name]) sites[name] = {};
+      sites[name].month2 = site;
+    }
+
+    for (const site of month3Data) {
+      const name = site.publisher_site || 'Unknown';
+      if (!sites[name]) sites[name] = {};
+      sites[name].month3 = site;
+    }
+
+    for (const site of monthCurrentData) {
+      const name = site.publisher_site || 'Unknown';
+      if (!sites[name]) sites[name] = {};
+      sites[name].monthCurrent = site;
+    }
+
+    return sites;
+  }
+
+  calculateMonthlyVariance(months, metric) {
+    const month1Value = this.parseValue(months.month1[metric]);
+    const month2Value = this.parseValue(months.month2[metric]);
+    const month3Value = this.parseValue(months.month3[metric]);
+    const monthCurrentValue = this.parseValue(months.monthCurrent[metric]);
+
+    // Calculate consecutive month-over-month variances
+    let variance1to2 = 0;
+    let variance2to3 = 0;
+    let variance3toCurrent = 0;
+
+    if (month1Value > 0) {
+      variance1to2 = ((month2Value - month1Value) / month1Value) * 100;
+    }
+    if (month2Value > 0) {
+      variance2to3 = ((month3Value - month2Value) / month2Value) * 100;
+    }
+    if (month3Value > 0) {
+      variance3toCurrent = ((monthCurrentValue - month3Value) / month3Value) * 100;
+    }
+
+    // Check if last 3 variances are in the same direction (all positive or all negative)
+    // and all exceed the threshold
+    let maxVariance = 0;
+    
+    if (variance1to2 > this.threshold && variance2to3 > this.threshold && variance3toCurrent > this.threshold) {
+      // Consistent upward trend
+      maxVariance = Math.max(variance1to2, variance2to3, variance3toCurrent);
+    } else if (variance1to2 < -this.threshold && variance2to3 < -this.threshold && variance3toCurrent < -this.threshold) {
+      // Consistent downward trend
+      maxVariance = Math.min(variance1to2, variance2to3, variance3toCurrent);
+    }
+
+    return { month1Value, month2Value, month3Value, monthCurrentValue, maxVariance };
   }
 
   async generateLowRPVReport() {
@@ -698,22 +942,65 @@ app.get('/api/variance-report', async (req, res) => {
       return res.status(401).json({ error: 'No user configured' });
     }
 
+    // Parse threshold from query params (default: 10)
+    const threshold = parseFloat(req.query.threshold) || 10.0;
+    const cacheKey = `varianceReport_${threshold}`;
+
     // Check cache first
     const cache = getCache();
     const forceRefresh = req.query.refresh === 'true';
     
-    if (!forceRefresh && cache.varianceReport && isCacheValid(cache.varianceReport)) {
-      console.log('✓ Serving variance report from cache');
-      return res.json(cache.varianceReport.data);
+    if (!forceRefresh && cache[cacheKey] && isCacheValid(cache[cacheKey])) {
+      console.log(`✓ Serving variance report (threshold: ${threshold}%) from cache`);
+      return res.json(cache[cacheKey].data);
     }
 
-    console.log('⟳ Fetching fresh variance report data...');
+    console.log(`⟳ Fetching fresh variance report data (threshold: ${threshold}%)...`);
     const token = decrypt(data.user.encryptedToken, data.user.iv);
-    const generator = new ReportGenerator(token);
+    const generator = new ReportGenerator(token, threshold);
     const report = await generator.generateVarianceReport();
 
     // Save to cache
-    cache.varianceReport = {
+    cache[cacheKey] = {
+      timestamp: new Date().toISOString(),
+      data: report
+    };
+    saveCache(cache);
+
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/monthly-variance-report', async (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+
+    // Parse threshold from query params (default: 10)
+    const threshold = parseFloat(req.query.threshold) || 10.0;
+    const cacheKey = `monthlyVarianceReport_${threshold}`;
+
+    // Check cache first
+    const cache = getCache();
+    const forceRefresh = req.query.refresh === 'true';
+    
+    if (!forceRefresh && cache[cacheKey] && isCacheValid(cache[cacheKey])) {
+      console.log(`✓ Serving monthly variance report (threshold: ${threshold}%) from cache`);
+      return res.json(cache[cacheKey].data);
+    }
+
+    console.log(`⟳ Fetching fresh monthly variance report data (threshold: ${threshold}%)...`);
+    const token = decrypt(data.user.encryptedToken, data.user.iv);
+    const generator = new ReportGenerator(token, threshold);
+    const report = await generator.generateMonthlyVarianceReport();
+
+    // Save to cache
+    cache[cacheKey] = {
       timestamp: new Date().toISOString(),
       data: report
     };

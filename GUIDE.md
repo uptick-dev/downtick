@@ -82,18 +82,7 @@ downtick/
     └── entitlements.mac.plist
 ```
 
-### Development Commands
 
-```bash
-# Start app (opens browser automatically)
-npm start
-
-# Run with DevTools
-npm run dev
-
-# Run just the server
-npm run server
-```
 
 ### Customization
 

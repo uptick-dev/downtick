@@ -183,7 +183,7 @@ function createMenu() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
-    height: 800,
+    height: 1000,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true

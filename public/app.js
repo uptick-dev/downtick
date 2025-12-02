@@ -6,6 +6,13 @@ const screens = {
 };
 
 let currentReport = 'weekly-variance';
+let varianceReportData = null;
+let varianceSortOrder = 'desc'; // 'desc' = highest absolute variance first (default), 'asc' = lowest first
+let monthlyVarianceReportData = null;
+let monthlyVarianceSortOrder = 'desc';
+let lowRPVReportData = null;
+let lowRPVSortOrder = 'desc'; // 'desc' = largest drop first (default), 'asc' = smallest drop first
+let currentThreshold = 10; // Default variance threshold percentage
 
 function showScreen(screenName) {
   Object.values(screens).forEach(screen => screen.style.display = 'none');
@@ -90,6 +97,35 @@ const reportContainer = document.getElementById('report-container');
 const refreshBtn = document.getElementById('refresh-btn');
 const reportTitle = document.getElementById('report-title');
 const reportSubtitle = document.getElementById('report-subtitle');
+const thresholdControl = document.getElementById('threshold-control');
+const thresholdInput = document.getElementById('threshold-input');
+
+// Threshold input handling - debounced auto-refresh
+let thresholdDebounceTimer = null;
+thresholdInput.addEventListener('input', (e) => {
+  const value = parseInt(e.target.value, 10);
+  if (value >= 1 && value <= 100) {
+    currentThreshold = value;
+    // Debounce: wait 500ms after user stops typing before refreshing
+    clearTimeout(thresholdDebounceTimer);
+    thresholdDebounceTimer = setTimeout(() => {
+      loadReport(currentReport, true);
+    }, 500);
+  }
+});
+
+// Also handle Enter key for immediate refresh
+thresholdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    clearTimeout(thresholdDebounceTimer);
+    const value = parseInt(thresholdInput.value, 10);
+    if (value >= 1 && value <= 100) {
+      currentThreshold = value;
+      loadReport(currentReport, true);
+    }
+  }
+});
 
 async function loadReport(reportType = currentReport, forceRefresh = false) {
   currentReport = reportType;
@@ -101,10 +137,17 @@ async function loadReport(reportType = currentReport, forceRefresh = false) {
     activeLink.parentElement.classList.add('active');
   }
   
+  // Show/hide threshold control based on report type
+  const isVarianceReport = reportType === 'weekly-variance' || reportType === 'monthly-variance';
+  thresholdControl.style.display = isVarianceReport ? 'flex' : 'none';
+  
   // Update report title and subtitle
   if (reportType === 'weekly-variance') {
     reportTitle.textContent = 'Weekly RPV Variance Report';
-    reportSubtitle.textContent = 'Publisher sites with >10% RPV (Revenue Per View) variation between weeks (last 3 complete weeks)';
+    reportSubtitle.innerHTML = `Publisher sites with >${currentThreshold}% RPV (Revenue Per View) variation between weeks<br>(last 3 complete weeks)`;
+  } else if (reportType === 'monthly-variance') {
+    reportTitle.textContent = 'Monthly RPV Variance Report';
+    reportSubtitle.innerHTML = `Publisher sites with >${currentThreshold}% RPV (Revenue Per View) variation between months<br>(last 3 complete months + current MTD)`;
   } else if (reportType === 'low-rpv') {
     reportTitle.textContent = 'Low RPV Alert';
     reportSubtitle.textContent = 'Publications with publisher RPV below $0.20 that have dropped since last week';
@@ -125,12 +168,19 @@ async function loadReport(reportType = currentReport, forceRefresh = false) {
   
   try {
     let endpoint = '/api/variance-report';
-    if (reportType === 'low-rpv') {
+    if (reportType === 'monthly-variance') {
+      endpoint = '/api/monthly-variance-report';
+    } else if (reportType === 'low-rpv') {
       endpoint = '/api/low-rpv-report';
     } else if (reportType === 'no-activity') {
       endpoint = '/api/no-activity-report';
     }
-    const url = forceRefresh ? `${endpoint}?refresh=true` : endpoint;
+    
+    // Build URL with query parameters
+    const params = new URLSearchParams();
+    if (forceRefresh) params.append('refresh', 'true');
+    if (isVarianceReport) params.append('threshold', currentThreshold);
+    const url = params.toString() ? `${endpoint}?${params.toString()}` : endpoint;
     const response = await fetch(url);
     const data = await response.json();
     
@@ -149,8 +199,11 @@ async function loadReport(reportType = currentReport, forceRefresh = false) {
       } else if (reportType === 'no-activity') {
         emptyMessage = 'All publishers that were active last week also had activity yesterday.';
         emptySubMessage = 'No inactive publishers detected.';
+      } else if (reportType === 'monthly-variance') {
+        emptyMessage = `No sites with >${currentThreshold}% variance found in the last 3 months.`;
+        emptySubMessage = 'This means all publisher sites have stable monthly performance.';
       } else {
-        emptyMessage = 'No sites with >10% variance found in the last 3 weeks.';
+        emptyMessage = `No sites with >${currentThreshold}% variance found in the last 3 weeks.`;
         emptySubMessage = 'This means all publisher sites have stable performance.';
       }
       
@@ -169,9 +222,14 @@ async function loadReport(reportType = currentReport, forceRefresh = false) {
       renderLowRPVReport(data);
     } else if (reportType === 'no-activity') {
       renderNoActivityReport(data);
+    } else if (reportType === 'monthly-variance') {
+      renderMonthlyVarianceReport(data);
     } else {
       renderVarianceReport(data);
     }
+    
+    // Update PDF button visibility after rendering
+    updatePdfButtonVisibility();
   } catch (error) {
     reportContainer.innerHTML = `
       <div class="error">Failed to load report: ${error.message}</div>
@@ -181,7 +239,11 @@ async function loadReport(reportType = currentReport, forceRefresh = false) {
   }
 }
 
-function renderVarianceReport(data) {
+function renderVarianceReport(data, sortOrder = 'desc') {
+  // Store data for re-sorting
+  varianceReportData = data;
+  varianceSortOrder = sortOrder;
+  
   // Debug: Log the received data
   console.log('Report data received:', data);
   console.log('Week ranges:', data.weekRanges);
@@ -210,13 +272,25 @@ function renderVarianceReport(data) {
           <th>${week1Label}</th>
           <th>${week2Label}</th>
           <th>${week3Label}</th>
-          <th>Max Variance</th>
+          <th class="sortable-header" id="variance-sort-header">Max Variance <span class="sort-indicator">${sortOrder === 'desc' ? '▼' : '▲'}</span></th>
         </tr>
       </thead>
       <tbody>
   `;
   
-  data.sites.forEach(site => {
+  // Sort sites based on current sort order
+  const sortedSites = [...data.sites].sort((a, b) => {
+    if (sortOrder === 'desc') {
+      return Math.abs(b.maxVariance) - Math.abs(a.maxVariance);
+    } else {
+      return Math.abs(a.maxVariance) - Math.abs(b.maxVariance);
+    }
+  });
+
+  sortedSites.forEach(site => {
+    // Debug: log views data
+    console.log('Site views data:', site.siteName, { week1Views: site.week1Views, week2Views: site.week2Views, week3Views: site.week3Views });
+    
     const varianceClass = site.maxVariance > 0 ? 'variance-positive' : 'variance-negative';
     const varianceSymbol = site.maxVariance > 0 ? '+' : '';
     const sparkline = generateSparkline([site.week1Value, site.week2Value, site.week3Value], site.maxVariance > 0);
@@ -225,9 +299,9 @@ function renderVarianceReport(data) {
       <tr>
         <td><strong>${escapeHtml(site.siteName)}</strong></td>
         <td class="sparkline-cell">${sparkline}</td>
-        <td>${formatNumber(site.week1Value)}</td>
-        <td>${formatNumber(site.week2Value)}</td>
-        <td>${formatNumber(site.week3Value)}</td>
+        <td class="rpv-cell" data-views="Views: ${formatViews(site.week1Views)}">${formatNumber(site.week1Value)}</td>
+        <td class="rpv-cell" data-views="Views: ${formatViews(site.week2Views)}">${formatNumber(site.week2Value)}</td>
+        <td class="rpv-cell" data-views="Views: ${formatViews(site.week3Views)}">${formatNumber(site.week3Value)}</td>
         <td class="${varianceClass}">${varianceSymbol}${site.maxVariance.toFixed(1)}%</td>
       </tr>
     `;
@@ -244,6 +318,109 @@ function renderVarianceReport(data) {
   `;
   
   reportContainer.innerHTML = html;
+  
+  // Add click handler for sorting
+  const sortHeader = document.getElementById('variance-sort-header');
+  if (sortHeader) {
+    sortHeader.addEventListener('click', () => {
+      const newSortOrder = varianceSortOrder === 'desc' ? 'asc' : 'desc';
+      renderVarianceReport(varianceReportData, newSortOrder);
+    });
+  }
+}
+
+function renderMonthlyVarianceReport(data, sortOrder = 'desc') {
+  // Store data for re-sorting
+  monthlyVarianceReportData = data;
+  monthlyVarianceSortOrder = sortOrder;
+  
+  // Format month ranges for display
+  const formatMonthRange = (range) => {
+    if (!range) return 'N/A';
+    const start = new Date(range.start + 'T00:00:00');
+    const end = new Date(range.end + 'T00:00:00');
+    const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+    const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
+    const year = start.getFullYear();
+    
+    // If same month, show "Nov 2024" or "Nov 1-30"
+    if (startMonth === endMonth) {
+      if (range.isCurrentMonth) {
+        return `${startMonth} ${start.getDate()}-${end.getDate()} (MTD)`;
+      }
+      return `${startMonth} ${year}`;
+    }
+    return `${startMonth} - ${endMonth}`;
+  };
+
+  const month1Label = data.monthRanges?.month1 ? formatMonthRange(data.monthRanges.month1) : 'Month 1';
+  const month2Label = data.monthRanges?.month2 ? formatMonthRange(data.monthRanges.month2) : 'Month 2';
+  const month3Label = data.monthRanges?.month3 ? formatMonthRange(data.monthRanges.month3) : 'Month 3';
+  const monthCurrentLabel = data.monthRanges?.monthCurrent ? formatMonthRange(data.monthRanges.monthCurrent) : 'Current MTD';
+
+  let html = `
+    <table>
+      <thead>
+        <tr>
+          <th>Publisher Site</th>
+          <th>Trend</th>
+          <th>${month1Label}</th>
+          <th>${month2Label}</th>
+          <th>${month3Label}</th>
+          <th>${monthCurrentLabel}</th>
+          <th class="sortable-header" id="monthly-variance-sort-header">Max Variance <span class="sort-indicator">${sortOrder === 'desc' ? '▼' : '▲'}</span></th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  
+  // Sort sites based on current sort order
+  const sortedSites = [...data.sites].sort((a, b) => {
+    if (sortOrder === 'desc') {
+      return Math.abs(b.maxVariance) - Math.abs(a.maxVariance);
+    } else {
+      return Math.abs(a.maxVariance) - Math.abs(b.maxVariance);
+    }
+  });
+
+  sortedSites.forEach(site => {
+    const varianceClass = site.maxVariance > 0 ? 'variance-positive' : 'variance-negative';
+    const varianceSymbol = site.maxVariance > 0 ? '+' : '';
+    const sparkline = generateSparkline([site.month1Value, site.month2Value, site.month3Value, site.monthCurrentValue], site.maxVariance > 0);
+    
+    html += `
+      <tr>
+        <td><strong>${escapeHtml(site.siteName)}</strong></td>
+        <td class="sparkline-cell">${sparkline}</td>
+        <td class="rpv-cell" data-views="Views: ${formatViews(site.month1Views)}">${formatNumber(site.month1Value)}</td>
+        <td class="rpv-cell" data-views="Views: ${formatViews(site.month2Views)}">${formatNumber(site.month2Value)}</td>
+        <td class="rpv-cell" data-views="Views: ${formatViews(site.month3Views)}">${formatNumber(site.month3Value)}</td>
+        <td class="rpv-cell" data-views="Views: ${formatViews(site.monthCurrentViews)}">${formatNumber(site.monthCurrentValue)}</td>
+        <td class="${varianceClass}">${varianceSymbol}${site.maxVariance.toFixed(1)}%</td>
+      </tr>
+    `;
+  });
+  
+  html += `
+      </tbody>
+    </table>
+    <div class="report-meta">
+      <p><strong>Report generated:</strong> ${new Date(data.generatedAt).toLocaleString()}</p>
+      <p><strong>Variance threshold:</strong> >${data.threshold}%</p>
+      <p><strong>Sites with variance:</strong> ${data.sites.length}</p>
+    </div>
+  `;
+  
+  reportContainer.innerHTML = html;
+  
+  // Add click handler for sorting
+  const sortHeader = document.getElementById('monthly-variance-sort-header');
+  if (sortHeader) {
+    sortHeader.addEventListener('click', () => {
+      const newSortOrder = monthlyVarianceSortOrder === 'desc' ? 'asc' : 'desc';
+      renderMonthlyVarianceReport(monthlyVarianceReportData, newSortOrder);
+    });
+  }
 }
 
 function formatNumber(num) {
@@ -255,6 +432,11 @@ function formatNumber(num) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 4
   }).format(num);
+}
+
+function formatViews(views) {
+  if (views === null || views === undefined) return 'N/A';
+  return new Intl.NumberFormat('en-US').format(Math.round(views));
 }
 
 function capitalizeMetric(metric) {
@@ -318,7 +500,11 @@ function generateSparkline(values, isPositive) {
   `;
 }
 
-function renderLowRPVReport(data) {
+function renderLowRPVReport(data, sortOrder = 'desc') {
+  // Store data for re-sorting
+  lowRPVReportData = data;
+  lowRPVSortOrder = sortOrder;
+  
   const formatDateRange = (range) => {
     if (!range) return 'N/A';
     // Parse as local date to avoid timezone shifts
@@ -338,14 +524,23 @@ function renderLowRPVReport(data) {
           <th>Trend</th>
           <th>${lastWeekLabel} RPV</th>
           <th>${thisWeekLabel} RPV</th>
-          <th>Change</th>
+          <th class="sortable-header" id="low-rpv-change-sort-header">Change <span class="sort-indicator">${sortOrder === 'desc' ? '▼' : '▲'}</span></th>
           <th>This Week Views</th>
         </tr>
       </thead>
       <tbody>
   `;
   
-  data.sites.forEach(site => {
+  // Sort sites based on current sort order (by change percentage)
+  const sortedSites = [...data.sites].sort((a, b) => {
+    if (sortOrder === 'desc') {
+      return a.change - b.change; // Most negative (largest drop) first
+    } else {
+      return b.change - a.change; // Least negative (smallest drop) first
+    }
+  });
+
+  sortedSites.forEach(site => {
     const changeClass = 'variance-negative';
     const changeSymbol = site.change < 0 ? '' : '+';
     const sparkline = generateSparkline([site.lastWeekRPV, site.thisWeekRPV], false);
@@ -373,6 +568,15 @@ function renderLowRPVReport(data) {
   `;
   
   reportContainer.innerHTML = html;
+  
+  // Add click handler for sorting
+  const sortHeader = document.getElementById('low-rpv-change-sort-header');
+  if (sortHeader) {
+    sortHeader.addEventListener('click', () => {
+      const newSortOrder = lowRPVSortOrder === 'desc' ? 'asc' : 'desc';
+      renderLowRPVReport(lowRPVReportData, newSortOrder);
+    });
+  }
 }
 
 function renderNoActivityReport(data) {
@@ -426,6 +630,212 @@ function renderNoActivityReport(data) {
   
   reportContainer.innerHTML = html;
 }
+
+// PDF Download functionality
+const downloadPdfBtn = document.getElementById('download-pdf-btn');
+
+function generateWeeklyVariancePDF() {
+  if (!varianceReportData) return;
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  // Title
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Uptick Weekly RPV Variance Report', 14, 20);
+  
+  // Subtitle
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text('Publisher sites with >10% RPV variation between weeks (last 3 complete weeks)', 14, 28);
+  
+  // Format date ranges for headers
+  const formatDateRange = (range) => {
+    if (!range) return 'N/A';
+    const start = new Date(range.start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const end = new Date(range.end + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${start} - ${end}`;
+  };
+  
+  const week1Label = varianceReportData.weekRanges?.week1 ? formatDateRange(varianceReportData.weekRanges.week1) : 'Week 1';
+  const week2Label = varianceReportData.weekRanges?.week2 ? formatDateRange(varianceReportData.weekRanges.week2) : 'Week 2';
+  const week3Label = varianceReportData.weekRanges?.week3 ? formatDateRange(varianceReportData.weekRanges.week3) : 'Week 3';
+  
+  // Sort sites by absolute variance (descending)
+  const sortedSites = [...varianceReportData.sites].sort((a, b) => 
+    Math.abs(b.maxVariance) - Math.abs(a.maxVariance)
+  );
+  
+  // Prepare table data
+  const tableData = sortedSites.map(site => [
+    site.siteName,
+    formatNumber(site.week1Value),
+    formatNumber(site.week2Value),
+    formatNumber(site.week3Value),
+    `${site.maxVariance > 0 ? '+' : ''}${site.maxVariance.toFixed(1)}%`
+  ]);
+  
+  // Generate table
+  doc.autoTable({
+    startY: 35,
+    head: [['Publisher Site', week1Label, week2Label, week3Label, 'Max Variance']],
+    body: tableData,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [0, 113, 227],
+      textColor: 255,
+      fontStyle: 'bold'
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 3
+    },
+    columnStyles: {
+      0: { cellWidth: 60 },
+      4: { halign: 'right' }
+    },
+    didParseCell: function(data) {
+      // Color variance column based on positive/negative
+      if (data.section === 'body' && data.column.index === 4) {
+        const value = parseFloat(data.cell.raw);
+        if (value > 0) {
+          data.cell.styles.textColor = [0, 113, 227]; // Blue for positive
+        } else {
+          data.cell.styles.textColor = [255, 59, 48]; // Red for negative
+        }
+      }
+    }
+  });
+  
+  // Footer with metadata
+  const finalY = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(`Report generated: ${new Date(varianceReportData.generatedAt).toLocaleString()}`, 14, finalY);
+  doc.text(`Variance threshold: >${varianceReportData.threshold}%`, 14, finalY + 5);
+  doc.text(`Sites with variance: ${varianceReportData.sites.length}`, 14, finalY + 10);
+  
+  // Save the PDF
+  const dateStr = new Date().toISOString().split('T')[0];
+  doc.save(`uptick-weekly-variance-report-${dateStr}.pdf`);
+}
+
+function generateMonthlyVariancePDF() {
+  if (!monthlyVarianceReportData) return;
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  // Title
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Uptick Monthly RPV Variance Report', 14, 20);
+  
+  // Subtitle
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text('Publisher sites with >10% RPV variation between months (last 3 complete months + current MTD)', 14, 28);
+  
+  // Format month ranges for headers
+  const formatMonthRange = (range) => {
+    if (!range) return 'N/A';
+    const start = new Date(range.start + 'T00:00:00');
+    const end = new Date(range.end + 'T00:00:00');
+    const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+    const year = start.getFullYear();
+    
+    if (range.isCurrentMonth) {
+      return `${startMonth} ${start.getDate()}-${end.getDate()} (MTD)`;
+    }
+    return `${startMonth} ${year}`;
+  };
+  
+  const month1Label = monthlyVarianceReportData.monthRanges?.month1 ? formatMonthRange(monthlyVarianceReportData.monthRanges.month1) : 'Month 1';
+  const month2Label = monthlyVarianceReportData.monthRanges?.month2 ? formatMonthRange(monthlyVarianceReportData.monthRanges.month2) : 'Month 2';
+  const month3Label = monthlyVarianceReportData.monthRanges?.month3 ? formatMonthRange(monthlyVarianceReportData.monthRanges.month3) : 'Month 3';
+  const monthCurrentLabel = monthlyVarianceReportData.monthRanges?.monthCurrent ? formatMonthRange(monthlyVarianceReportData.monthRanges.monthCurrent) : 'Current MTD';
+  
+  // Sort sites by absolute variance (descending)
+  const sortedSites = [...monthlyVarianceReportData.sites].sort((a, b) => 
+    Math.abs(b.maxVariance) - Math.abs(a.maxVariance)
+  );
+  
+  // Prepare table data
+  const tableData = sortedSites.map(site => [
+    site.siteName,
+    formatNumber(site.month1Value),
+    formatNumber(site.month2Value),
+    formatNumber(site.month3Value),
+    formatNumber(site.monthCurrentValue),
+    `${site.maxVariance > 0 ? '+' : ''}${site.maxVariance.toFixed(1)}%`
+  ]);
+  
+  // Generate table
+  doc.autoTable({
+    startY: 35,
+    head: [['Publisher Site', month1Label, month2Label, month3Label, monthCurrentLabel, 'Max Variance']],
+    body: tableData,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [0, 113, 227],
+      textColor: 255,
+      fontStyle: 'bold'
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 3
+    },
+    columnStyles: {
+      0: { cellWidth: 50 },
+      5: { halign: 'right' }
+    },
+    didParseCell: function(data) {
+      // Color variance column based on positive/negative
+      if (data.section === 'body' && data.column.index === 5) {
+        const value = parseFloat(data.cell.raw);
+        if (value > 0) {
+          data.cell.styles.textColor = [0, 113, 227]; // Blue for positive
+        } else {
+          data.cell.styles.textColor = [255, 59, 48]; // Red for negative
+        }
+      }
+    }
+  });
+  
+  // Footer with metadata
+  const finalY = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(`Report generated: ${new Date(monthlyVarianceReportData.generatedAt).toLocaleString()}`, 14, finalY);
+  doc.text(`Variance threshold: >${monthlyVarianceReportData.threshold}%`, 14, finalY + 5);
+  doc.text(`Sites with variance: ${monthlyVarianceReportData.sites.length}`, 14, finalY + 10);
+  
+  // Save the PDF
+  const dateStr = new Date().toISOString().split('T')[0];
+  doc.save(`uptick-monthly-variance-report-${dateStr}.pdf`);
+}
+
+function downloadCurrentReportPDF() {
+  if (currentReport === 'weekly-variance') {
+    generateWeeklyVariancePDF();
+  } else if (currentReport === 'monthly-variance') {
+    generateMonthlyVariancePDF();
+  }
+}
+
+// Update PDF button visibility based on current report
+function updatePdfButtonVisibility() {
+  if (currentReport === 'weekly-variance' || currentReport === 'monthly-variance') {
+    downloadPdfBtn.style.display = 'inline-block';
+  } else {
+    downloadPdfBtn.style.display = 'none';
+  }
+}
+
+downloadPdfBtn.addEventListener('click', downloadCurrentReportPDF);
 
 // Refresh button
 refreshBtn.addEventListener('click', () => loadReport(currentReport, true));
