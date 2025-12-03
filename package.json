@@ -1,6 +1,6 @@
 {
   "name": "downtick",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Downtick - Analytics Reporter",
   "main": "main.js",
   "scripts": {
@@ -49,6 +49,13 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "x64",
             "arm64"

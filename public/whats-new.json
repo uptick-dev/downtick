@@ -1,8 +1,8 @@
 {
-  "1.1.0": {
-    "version": "1.1.0",
+  "1.1.1": {
+    "version": "1.1.1",
     "date": "2024-12-03",
-    "title": "Version 1.1.0 - What's New",
+    "title": "Version 1.1.1 - What's New",
     "highlights": [
       "Added Send to Slack functionality (requires Slack webhook URL, contact John for more information)",
       "Previously added in 1.0.0: Sortable Max Variance column on Monthly and Weekly Variance Reports",

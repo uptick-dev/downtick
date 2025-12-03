@@ -11,13 +11,32 @@ let isManualUpdateCheck = false;
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 
+// Log auto-updater configuration for debugging
+console.log('Auto-updater configuration:');
+console.log('- App version:', app.getVersion());
+console.log('- Auto download:', autoUpdater.autoDownload);
+console.log('- Auto install on quit:', autoUpdater.autoInstallOnAppQuit);
+console.log('- Update feed URL:', autoUpdater.getFeedURL() || 'Not set (will use default GitHub releases)');
+console.log('- Platform:', process.platform);
+console.log('- Arch:', process.arch);
+
+// For private repos, you may need to set GH_TOKEN
+if (process.env.GH_TOKEN) {
+  console.log('- GitHub token: Set');
+  autoUpdater.requestHeaders = { 'Authorization': `token ${process.env.GH_TOKEN}` };
+} else {
+  console.log('- GitHub token: Not set (public repo assumed)');
+}
+
 // Auto-updater event handlers
 autoUpdater.on('checking-for-update', () => {
   console.log('Checking for updates...');
+  console.log('Checking GitHub repo: uptick-dev/downtick');
 });
 
 autoUpdater.on('update-available', (info) => {
   console.log('Update available:', info.version);
+  console.log('Update info:', JSON.stringify(info, null, 2));
   dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: 'Update Available',
@@ -26,7 +45,10 @@ autoUpdater.on('update-available', (info) => {
     defaultId: 0
   }).then((result) => {
     if (result.response === 0) {
-      autoUpdater.downloadUpdate();
+      console.log('Starting update download...');
+      autoUpdater.downloadUpdate().catch(err => {
+        console.error('Download initiation failed:', err);
+      });
     }
   });
 });
@@ -47,7 +69,7 @@ autoUpdater.on('update-not-available', () => {
 });
 
 autoUpdater.on('download-progress', (progressObj) => {
-  const message = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}%`;
+  const message = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total} bytes)`;
   console.log(message);
   if (mainWindow) {
     mainWindow.setProgressBar(progressObj.percent / 100);
@@ -74,13 +96,43 @@ autoUpdater.on('update-downloaded', (info) => {
 
 autoUpdater.on('error', (err) => {
   console.error('Update error:', err);
+  console.error('Error stack:', err.stack);
+  
+  // Determine error message based on error type
+  let errorMessage = 'An error occurred while checking for updates.';
+  let detailMessage = '';
+  
+  if (err.message) {
+    if (err.message.includes('net::ERR_')) {
+      errorMessage = 'Network error while checking for updates.';
+      detailMessage = 'Please check your internet connection and try again.';
+    } else if (err.message.includes('404') || err.message.includes('Not Found')) {
+      errorMessage = 'Update server not found.';
+      detailMessage = 'The update server may be temporarily unavailable. Please try again later.';
+    } else if (err.message.includes('ENOTFOUND') || err.message.includes('ECONNREFUSED')) {
+      errorMessage = 'Cannot connect to update server.';
+      detailMessage = 'Please check your internet connection and firewall settings.';
+    } else if (err.message.includes('HttpError')) {
+      errorMessage = 'Update server error.';
+      detailMessage = err.message;
+    } else {
+      detailMessage = err.message;
+    }
+  }
+  
   if (mainWindow) {
+    const dialogMessage = detailMessage ? `${errorMessage}\n\n${detailMessage}` : errorMessage;
     dialog.showMessageBox(mainWindow, {
       type: 'error',
       title: 'Update Error',
-      message: 'An error occurred while checking for updates.',
+      message: dialogMessage,
       buttons: ['OK']
     });
+  }
+  
+  // Reset progress bar if it was set
+  if (mainWindow) {
+    mainWindow.setProgressBar(-1);
   }
 });
 
