@@ -18,7 +18,7 @@
       <div class="card">
         <h1 class="logo"><img src="downtick_logo.png" alt="Downtick" class="logo-banner"></h1>
         <h2>Welcome! Let's Get Started</h2>
-        <p class="subtitle">Enter your API token to begin generating reports.</p>
+        <p class="subtitle">Enter your API token to begin generating reports</p>
         
         <div id="setup-error" class="error" style="display: none;"></div>
         
@@ -31,7 +31,7 @@
           <div class="form-group">
             <label for="api-token">API Token</label>
             <input type="text" id="api-token" name="api-token" required placeholder="Your API token">
-            <small>Get your API token from your dashboard</small>
+            <small>Get your API token from your <a href="https://dashboard.uptick.com/user/edit">profile page</a></small>
           </div>
           
           <button type="submit" id="setup-btn" class="btn btn-primary">
@@ -68,7 +68,10 @@
             <a href="#" class="nav-link" data-report="no-activity">No Activity Alert</a>
           </li>
         </ul>
-        <button id="logout-btn" class="btn btn-secondary btn-sm">Logout</button>
+        <div class="nav-actions">
+          <button id="slack-config-btn" class="btn btn-secondary btn-sm" title="Slack Settings">Slack Settings</button>
+          <button id="logout-btn" class="btn btn-secondary btn-sm">Logout</button>
+        </div>
       </div>
     </nav>
     
@@ -85,6 +88,10 @@
               <input type="number" id="threshold-input" min="1" max="100" value="10" step="1">
               <span class="threshold-suffix">%</span>
             </div>
+            <button id="send-slack-btn" class="btn btn-primary btn-sm" style="display: none;" title="Send to Slack">
+              <img src="assets/slack-logo.svg" alt="Slack" width="16" height="16" style="vertical-align: text-bottom; margin-right: 4px;">
+              Send to Slack
+            </button>
             <button id="download-pdf-btn" class="btn btn-secondary btn-sm" style="display: none;">📄 Download PDF</button>
             <button id="refresh-btn" class="btn btn-secondary btn-sm">🔄 Refresh</button>
           </div>
@@ -105,6 +112,52 @@
     <div class="loading">
       <div class="spinner"></div>
       <p>Initializing...</p>
+    </div>
+  </div>
+
+  <!-- Slack Configuration Modal -->
+  <div id="slack-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Slack Configuration</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="slack-webhook-url">Slack Webhook URL:</label>
+          <input type="url" id="slack-webhook-url" placeholder="https://hooks.slack.com/services/..." required>
+          <small>Contact your administrator for the webhook URL</small>
+        </div>
+        <div id="slack-status" class="slack-status not-configured">
+          ⚠️ Slack integration is not configured yet.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="save-slack-config-btn" class="btn btn-primary">Save Configuration</button>
+        <button id="remove-slack-config-btn" class="btn btn-danger" style="display: none;">Remove Integration</button>
+        <button class="btn btn-secondary modal-close">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- What's New Modal -->
+  <div id="whats-new-modal" class="modal" style="display: none;">
+    <div class="modal-content whats-new-content">
+      <div class="modal-header">
+        <h3>🎉 What's New</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="whats-new-body">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading release notes...</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="whats-new-close-btn" class="btn btn-primary">Got it!</button>
+      </div>
     </div>
   </div>
 

@@ -50,6 +50,11 @@ function initDataStorage() {
   console.log(`✓ Data directory: ${DATA_DIR}`);
 }
 
+// Get default Slack webhook from environment variable
+function getDefaultSlackWebhook() {
+  return process.env.SLACK_WEBHOOK_URL || null;
+}
+
 function getData() {
   try {
     const data = fs.readFileSync(dataPath, 'utf8');
@@ -468,6 +473,189 @@ class UptickAPI {
     } catch {
       return false;
     }
+  }
+}
+
+// Slack API Service
+class SlackService {
+  constructor(webhookUrl) {
+    this.webhookUrl = webhookUrl;
+  }
+
+  async sendMessage(message) {
+    try {
+      const response = await axios.post(this.webhookUrl, message, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      });
+      
+      return response.status === 200;
+    } catch (error) {
+      console.error('Slack API error:', error.response?.data || error.message);
+      throw new Error(`Failed to send Slack message: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  formatVarianceReport(report, reportType = 'weekly') {
+    const { sites } = report;
+    const isWeekly = reportType === 'weekly';
+    
+    if (sites.length === 0) {
+      return {
+        text: `✅ All Clear! No ${isWeekly ? 'weekly' : 'monthly'} variance issues detected.`,
+        color: 'good'
+      };
+    }
+
+    // Filter for downward-trending sites only
+    const downwardSites = sites.filter(site => site.maxVariance < 0);
+    
+    if (downwardSites.length === 0) {
+      return {
+        text: `✅ All Clear! No ${isWeekly ? 'weekly' : 'monthly'} downward variance issues detected.`,
+        color: 'good'
+      };
+    }
+
+    const threshold = 10; // Show top 10 by default, rest can be unfurled
+    const topSites = downwardSites.slice(0, threshold);
+    const hasMore = downwardSites.length > threshold;
+    const periodLabel = isWeekly ? 'Week' : 'Month';
+    
+    let text = `🚨 ${isWeekly ? 'Weekly' : 'Monthly'} RPV Variance Alert\n`;
+    text += `Found ${downwardSites.length} sites with significant downward variance:\n\n`;
+
+    // Always show top sites
+    const fields = topSites.map((site, index) => {
+      const varianceSymbol = '📉'; // Always downward for variance reports
+      const varianceText = `${varianceSymbol} ${site.maxVariance.toFixed(1)}%`;
+      
+      const value1 = isWeekly ? 
+        `$${site.week1Value.toFixed(2)}` : 
+        `$${site.month1Value.toFixed(2)}`;
+      const value2 = isWeekly ? 
+        `$${site.week3Value.toFixed(2)}` : 
+        `$${site.monthCurrentValue.toFixed(2)}`;
+
+      return {
+        title: `${index + 1}. ${site.siteName}`,
+        value: `${varianceText}\n${periodLabel} 1: ${value1} → ${periodLabel} 3: ${value2}`,
+        short: false
+      };
+    });
+
+    if (hasMore) {
+      fields.push({
+        title: `... and ${downwardSites.length - threshold} more sites`,
+        value: '(Open the Downtick app to view the full report)',
+        short: false
+      });
+    }
+
+    return {
+      text,
+      attachments: [{
+        color: 'danger', // Always danger for downward variance
+        fields,
+        footer: 'Downtick Analytics',
+        ts: Math.floor(Date.now() / 1000)
+      }]
+    };
+  }
+
+  formatLowRPVReport(report) {
+    const { sites } = report;
+    
+    if (sites.length === 0) {
+      return {
+        text: '✅ All Clear! No sites with low RPV detected.',
+        color: 'good'
+      };
+    }
+
+    const threshold = 10; // Show top 10 by default, rest can be unfurled
+    const topSites = sites.slice(0, threshold);
+    const hasMore = sites.length > threshold;
+    
+    let text = `⚠️ Low RPV Alert\n`;
+    text += `Found ${sites.length} sites with RPV below $0.20:\n\n`;
+
+    // Always show top sites
+    const fields = topSites.map((site, index) => {
+      const changeSymbol = '📉';
+      const changeText = `${changeSymbol} ${site.change.toFixed(1)}%`;
+      
+      return {
+        title: `${index + 1}. ${site.siteName}`,
+        value: `${changeText}\nLast Week: $${site.lastWeekRPV.toFixed(2)} → This Week: $${site.thisWeekRPV.toFixed(2)}\nViews: ${site.thisWeekViews.toLocaleString()}`,
+        short: false
+      };
+    });
+
+    if (hasMore) {
+      fields.push({
+        title: `... and ${sites.length - threshold} more sites`,
+        value: '(Open the Downtick app to view the full report)',
+        short: false
+      });
+    }
+
+    return {
+      text,
+      attachments: [{
+        color: 'warning',
+        fields,
+        footer: 'Downtick Analytics',
+        ts: Math.floor(Date.now() / 1000)
+      }]
+    };
+  }
+
+  formatNoActivityReport(report) {
+    const { sites } = report;
+    
+    if (sites.length === 0) {
+      return {
+        text: '✅ All Clear! All publishers were active yesterday.',
+        color: 'good'
+      };
+    }
+
+    const threshold = 10; // Show top 10 by default, rest can be unfurled
+    const topSites = sites.slice(0, threshold);
+    const hasMore = sites.length > threshold;
+    
+    let text = `🔕 No Activity Alert\n`;
+    text += `Found ${sites.length} publishers with no activity yesterday:\n\n`;
+
+    // Always show top sites
+    const fields = topSites.map((site, index) => {
+      return {
+        title: `${index + 1}. ${site.siteName}`,
+        value: `Last Week: ${site.lastWeekViews.toLocaleString()} views\nRevenue: $${site.lastWeekRevenue.toFixed(2)}\nRPV: $${site.lastWeekRPV.toFixed(2)}`,
+        short: false
+      };
+    });
+
+    if (hasMore) {
+      fields.push({
+        title: `... and ${sites.length - threshold} more sites`,
+        value: '(Open the Downtick app to view the full report)',
+        short: false
+      });
+    }
+
+    return {
+      text,
+      attachments: [{
+        color: 'danger',
+        fields,
+        footer: 'Downtick Analytics',
+        ts: Math.floor(Date.now() / 1000)
+      }]
+    };
   }
 }
 
@@ -1086,6 +1274,290 @@ app.post('/api/logout', (req, res) => {
   try {
     saveData({ user: null });
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save Slack configuration
+app.post('/api/slack-config', (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+
+    const { webhookUrl } = req.body;
+    
+    if (!webhookUrl) {
+      return res.status(400).json({ error: 'Webhook URL is required' });
+    }
+
+    // Validate webhook URL format
+    if (!webhookUrl.startsWith('https://hooks.slack.com/')) {
+      return res.status(400).json({ error: 'Invalid Slack webhook URL' });
+    }
+
+    // Encrypt and store webhook URL
+    const { encrypted: encryptedWebhook, iv: webhookIv } = encrypt(webhookUrl);
+    data.user.slackWebhookUrl = encryptedWebhook;
+    data.user.slackWebhookIv = webhookIv;
+    
+    // Remove channel override if it exists
+    delete data.user.slackChannel;
+    
+    saveData(data);
+    
+    res.json({ 
+      success: true, 
+      message: 'Slack configuration saved successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/slack-config', (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+
+    const hasSlackConfig = data.user.slackWebhookUrl && data.user.slackWebhookIv;
+    const defaultWebhook = getDefaultSlackWebhook();
+    
+    res.json({ 
+      configured: hasSlackConfig || !!defaultWebhook,
+      webhookUrl: hasSlackConfig ? '***configured***' : (defaultWebhook ? '***default***' : null),
+      hasDefault: !!defaultWebhook
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/slack-config', (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+
+    delete data.user.slackWebhookUrl;
+    delete data.user.slackWebhookIv;
+    
+    saveData(data);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Slack notification endpoints
+app.post('/api/slack/send-variance', async (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+
+    // Get webhook URL from user config or default
+    let webhookUrl = null;
+    if (data.user.slackWebhookUrl && data.user.slackWebhookIv) {
+      webhookUrl = decrypt(data.user.slackWebhookUrl, data.user.slackWebhookIv);
+    } else {
+      webhookUrl = getDefaultSlackWebhook();
+    }
+
+    if (!webhookUrl) {
+      return res.status(400).json({ error: 'Slack not configured' });
+    }
+
+    const { reportType = 'weekly', threshold = 10.0 } = req.body;
+    const token = decrypt(data.user.encryptedToken, data.user.iv);
+    
+    // Generate fresh report
+    const generator = new ReportGenerator(token, threshold);
+    let report;
+    
+    if (reportType === 'monthly') {
+      report = await generator.generateMonthlyVarianceReport();
+    } else {
+      report = await generator.generateVarianceReport();
+    }
+
+    if (report.error) {
+      return res.status(500).json({ error: report.error });
+    }
+
+    // Send to Slack with channel override
+    const slackService = new SlackService(webhookUrl);
+    const slackMessage = slackService.formatVarianceReport(report, reportType);
+    await slackService.sendMessage(slackMessage);
+
+    res.json({ 
+      success: true, 
+      message: `Report sent to Slack (${report.sites.length} sites with variance)` 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/slack/send-low-rpv', async (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+
+    // Get webhook URL from user config or default
+    let webhookUrl = null;
+    if (data.user.slackWebhookUrl && data.user.slackWebhookIv) {
+      webhookUrl = decrypt(data.user.slackWebhookUrl, data.user.slackWebhookIv);
+    } else {
+      webhookUrl = getDefaultSlackWebhook();
+    }
+
+    if (!webhookUrl) {
+      return res.status(400).json({ error: 'Slack not configured' });
+    }
+
+    const token = decrypt(data.user.encryptedToken, data.user.iv);
+    
+    // Generate fresh report
+    const generator = new ReportGenerator(token);
+    const report = await generator.generateLowRPVReport();
+
+    if (report.error) {
+      return res.status(500).json({ error: report.error });
+    }
+
+    // Send to Slack with channel override
+    const slackService = new SlackService(webhookUrl);
+    const slackMessage = slackService.formatLowRPVReport(report);
+    await slackService.sendMessage(slackMessage);
+
+    res.json({ 
+      success: true, 
+      message: `Report sent to Slack (${report.sites.length} sites with low RPV)` 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/slack/send-no-activity', async (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+
+    // Get webhook URL from user config or default
+    let webhookUrl = null;
+    if (data.user.slackWebhookUrl && data.user.slackWebhookIv) {
+      webhookUrl = decrypt(data.user.slackWebhookUrl, data.user.slackWebhookIv);
+    } else {
+      webhookUrl = getDefaultSlackWebhook();
+    }
+
+    if (!webhookUrl) {
+      return res.status(400).json({ error: 'Slack not configured' });
+    }
+
+    const token = decrypt(data.user.encryptedToken, data.user.iv);
+    
+    // Generate fresh report
+    const generator = new ReportGenerator(token);
+    const report = await generator.generateNoActivityReport();
+
+    if (report.error) {
+      return res.status(500).json({ error: report.error });
+    }
+
+    // Send to Slack with channel override
+    const slackService = new SlackService(webhookUrl);
+    const slackMessage = slackService.formatNoActivityReport(report);
+    await slackService.sendMessage(slackMessage);
+
+    res.json({ 
+      success: true, 
+      message: `Report sent to Slack (${report.sites.length} inactive publishers)` 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// What's New endpoints
+app.get('/api/whats-new/:version', (req, res) => {
+  try {
+    const whatsNewPath = path.join(__dirname, 'public', 'whats-new.json');
+    const whatsNewData = JSON.parse(fs.readFileSync(whatsNewPath, 'utf8'));
+    const version = req.params.version;
+    
+    if (whatsNewData[version]) {
+      res.json(whatsNewData[version]);
+    } else {
+      res.status(404).json({ error: 'Version not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/whats-new', (req, res) => {
+  try {
+    const whatsNewPath = path.join(__dirname, 'public', 'whats-new.json');
+    const whatsNewData = JSON.parse(fs.readFileSync(whatsNewPath, 'utf8'));
+    res.json(whatsNewData);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/version-seen', (req, res) => {
+  try {
+    const { version } = req.body;
+    const data = getData();
+    
+    if (!data.user) {
+      return res.status(401).json({ error: 'No user configured' });
+    }
+    
+    data.user.lastSeenVersion = version;
+    saveData(data);
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/should-show-whats-new', (req, res) => {
+  try {
+    const data = getData();
+    
+    if (!data.user) {
+      return res.json({ shouldShow: false });
+    }
+    
+    const currentVersion = require('./package.json').version;
+    const lastSeenVersion = data.user.lastSeenVersion;
+    
+    res.json({ 
+      shouldShow: !lastSeenVersion || lastSeenVersion !== currentVersion,
+      currentVersion,
+      lastSeenVersion
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

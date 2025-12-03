@@ -30,6 +30,7 @@ async function init() {
     if (data.user) {
       showScreen('report');
       setupNavigationHandlers();
+      await loadSlackConfig(); // Load Slack configuration
       loadReport();
     } else {
       showScreen('setup');
@@ -856,5 +857,411 @@ logoutBtn.addEventListener('click', async () => {
   }
 });
 
+// Slack integration
+let slackConfigured = false;
+
+// Get Slack elements safely
+function getSlackElements() {
+  return {
+    slackConfigBtn: document.getElementById('slack-config-btn'),
+    sendSlackBtn: document.getElementById('send-slack-btn'),
+    slackModal: document.getElementById('slack-modal'),
+    slackModalClose: document.querySelector('#slack-modal .modal-close'),
+    saveSlackConfigBtn: document.getElementById('save-slack-config-btn'),
+    removeSlackConfigBtn: document.getElementById('remove-slack-config-btn'),
+    slackWebhookUrlInput: document.getElementById('slack-webhook-url'),
+    slackStatus: document.getElementById('slack-status')
+  };
+}
+
+// Slack modal handlers
+document.addEventListener('DOMContentLoaded', () => {
+  const elements = getSlackElements();
+  
+  if (elements.slackConfigBtn) {
+    elements.slackConfigBtn.addEventListener('click', async () => {
+      await loadSlackConfig();
+      if (elements.slackModal) {
+        elements.slackModal.style.display = 'flex';
+      }
+    });
+  }
+  
+  // Handle all modal close buttons
+  if (elements.slackModal) {
+    const closeButtons = elements.slackModal.querySelectorAll('.modal-close');
+    closeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        elements.slackModal.style.display = 'none';
+      });
+    });
+    
+    // Close when clicking outside
+    elements.slackModal.addEventListener('click', (e) => {
+      if (e.target === elements.slackModal) {
+        elements.slackModal.style.display = 'none';
+      }
+    });
+  }
+  
+  if (elements.saveSlackConfigBtn) {
+    elements.saveSlackConfigBtn.addEventListener('click', saveSlackConfig);
+  }
+  
+  if (elements.removeSlackConfigBtn) {
+    elements.removeSlackConfigBtn.addEventListener('click', removeSlackConfig);
+  }
+  
+  if (elements.sendSlackBtn) {
+    elements.sendSlackBtn.addEventListener('click', sendToSlack);
+  }
+});
+
+// Load Slack configuration
+async function loadSlackConfig() {
+  try {
+    const elements = getSlackElements();
+    
+    // Check if Slack elements exist before trying to use them
+    if (!elements.slackWebhookUrlInput || !elements.slackStatus) {
+      console.warn('Slack elements not found, skipping config load');
+      return;
+    }
+    
+    const response = await fetch('/api/slack-config');
+    const data = await response.json();
+    
+    slackConfigured = data.configured;
+    
+    if (slackConfigured) {
+      if (data.hasDefault) {
+        elements.slackStatus.innerHTML = '✅ Slack integration is pre-configured for all users.';
+        elements.slackStatus.className = 'slack-status configured';
+        elements.slackWebhookUrlInput.value = '***pre-configured***';
+        elements.slackWebhookUrlInput.disabled = true;
+        if (elements.saveSlackConfigBtn) elements.saveSlackConfigBtn.style.display = 'none';
+        if (elements.removeSlackConfigBtn) elements.removeSlackConfigBtn.style.display = 'none';
+      } else {
+        elements.slackStatus.innerHTML = '✅ Slack integration is configured and ready to use.';
+        elements.slackStatus.className = 'slack-status configured';
+        elements.slackWebhookUrlInput.value = '***configured***';
+        elements.slackWebhookUrlInput.disabled = true;
+        if (elements.saveSlackConfigBtn) elements.saveSlackConfigBtn.style.display = 'none';
+        if (elements.removeSlackConfigBtn) elements.removeSlackConfigBtn.style.display = 'inline-block';
+      }
+    } else {
+      elements.slackStatus.innerHTML = '⚠️ Slack integration is not configured yet.';
+      elements.slackStatus.className = 'slack-status not-configured';
+      elements.slackWebhookUrlInput.value = '';
+      elements.slackWebhookUrlInput.disabled = false;
+      if (elements.saveSlackConfigBtn) elements.saveSlackConfigBtn.style.display = 'inline-block';
+      if (elements.removeSlackConfigBtn) elements.removeSlackConfigBtn.style.display = 'none';
+    }
+    
+    updateSlackButtonState();
+  } catch (error) {
+    console.error('Failed to load Slack config:', error);
+    const elements = getSlackElements();
+    if (elements.slackStatus) {
+      elements.slackStatus.innerHTML = '❌ Failed to load Slack configuration.';
+      elements.slackStatus.className = 'slack-status not-configured';
+    }
+  }
+}
+
+// Save Slack configuration
+async function saveSlackConfig() {
+  const elements = getSlackElements();
+  
+  // Check if elements exist
+  if (!elements.slackWebhookUrlInput) {
+    showToast('Slack configuration elements not found', 'error');
+    return;
+  }
+  
+  const webhookUrl = elements.slackWebhookUrlInput.value.trim();
+  
+  if (!webhookUrl) {
+    showToast('Please enter a Slack webhook URL', 'error');
+    return;
+  }
+  
+  if (!webhookUrl.startsWith('https://hooks.slack.com/')) {
+    showToast('Invalid Slack webhook URL format', 'error');
+    return;
+  }
+  
+  try {
+    if (elements.saveSlackConfigBtn) {
+      elements.saveSlackConfigBtn.disabled = true;
+      elements.saveSlackConfigBtn.textContent = 'Saving...';
+    }
+    
+    const response = await fetch('/api/slack-config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ webhookUrl })
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showToast(data.message || 'Slack configuration saved successfully', 'success');
+      await loadSlackConfig();
+      updateSlackButtonState();
+    } else {
+      showToast(data.error || 'Failed to save Slack configuration', 'error');
+    }
+  } catch (error) {
+    showToast(`Error: ${error.message}`, 'error');
+  } finally {
+    if (elements.saveSlackConfigBtn) {
+      elements.saveSlackConfigBtn.disabled = false;
+      elements.saveSlackConfigBtn.textContent = 'Save Configuration';
+    }
+  }
+}
+
+// Remove Slack configuration
+async function removeSlackConfig() {
+  if (!confirm('Are you sure you want to remove the Slack integration?')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/slack-config', { method: 'DELETE' });
+    const data = await response.json();
+    
+    if (response.ok) {
+      showToast('Slack integration removed', 'info');
+      await loadSlackConfig();
+    } else {
+      showToast(data.error || 'Failed to remove Slack configuration', 'error');
+    }
+  } catch (error) {
+    showToast(`Error: ${error.message}`, 'error');
+  }
+}
+
+// Send to Slack
+async function sendToSlack() {
+  if (!slackConfigured) {
+    showToast('Please configure Slack integration first', 'error');
+    return;
+  }
+  
+  const elements = getSlackElements();
+  if (!elements.sendSlackBtn) {
+    showToast('Send button not found', 'error');
+    return;
+  }
+  
+  elements.sendSlackBtn.disabled = true;
+  elements.sendSlackBtn.innerHTML = '<img src="assets/slack-logo.svg" alt="Slack" width="16" height="16" style="vertical-align: text-bottom; margin-right: 4px;"> Sending...';
+  
+  try {
+    let endpoint = '/api/slack/send-variance';
+    let body = { reportType: 'weekly' };
+    
+    if (currentReport === 'monthly-variance') {
+      body.reportType = 'monthly';
+      body.threshold = currentThreshold;
+    } else if (currentReport === 'low-rpv') {
+      endpoint = '/api/slack/send-low-rpv';
+      body = {};
+    } else if (currentReport === 'no-activity') {
+      endpoint = '/api/slack/send-no-activity';
+      body = {};
+    }
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showToast(data.message || 'Report sent to Slack!', 'success');
+    } else {
+      showToast(data.error || 'Failed to send report to Slack', 'error');
+    }
+  } catch (error) {
+    showToast(`Error: ${error.message}`, 'error');
+  } finally {
+    elements.sendSlackBtn.disabled = false;
+    elements.sendSlackBtn.innerHTML = '<img src="assets/slack-logo.svg" alt="Slack" width="16" height="16" style="vertical-align: text-bottom; margin-right: 4px;"> Send to Slack';
+  }
+}
+
+// Update Slack button states
+function updateSlackButtonState() {
+  const elements = getSlackElements();
+  
+  if (!elements.slackConfigBtn || !elements.sendSlackBtn) {
+    console.warn('Slack button elements not found, skipping state update');
+    return;
+  }
+  
+  if (slackConfigured) {
+    elements.slackConfigBtn.classList.add('configured');
+    elements.sendSlackBtn.style.display = 'inline-block';
+  } else {
+    elements.slackConfigBtn.classList.remove('configured');
+    elements.sendSlackBtn.style.display = 'none';
+  }
+}
+
+// Toast notification system
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  
+  document.body.appendChild(toast);
+  
+  // Trigger animation
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // Hide after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => document.body.removeChild(toast), 300);
+  }, 3000);
+}
+
+// What's New Modal
+const whatsNewModal = document.getElementById('whats-new-modal');
+const whatsNewBody = document.getElementById('whats-new-body');
+const whatsNewCloseBtn = document.getElementById('whats-new-close-btn');
+
+async function checkAndShowWhatsNew() {
+  try {
+    const response = await fetch('/api/should-show-whats-new');
+    const data = await response.json();
+    
+    if (data.shouldShow && data.currentVersion) {
+      await showWhatsNew(data.currentVersion);
+    }
+  } catch (error) {
+    console.error('Error checking what\'s new:', error);
+  }
+}
+
+async function showWhatsNew(version) {
+  try {
+    const response = await fetch(`/api/whats-new/${version}`);
+    const releaseNotes = await response.json();
+    
+    if (response.ok) {
+      displayWhatsNew(releaseNotes);
+      whatsNewModal.style.display = 'flex';
+    }
+  } catch (error) {
+    console.error('Error loading what\'s new:', error);
+  }
+}
+
+function displayWhatsNew(notes) {
+  let html = `
+    <div class="whats-new-version">Version ${notes.version}</div>
+    <div class="whats-new-date">${formatDate(notes.date)}</div>
+  `;
+  
+  if (notes.highlights && notes.highlights.length > 0) {
+    html += `
+      <div class="whats-new-section">
+        <h4>✨ New Features</h4>
+        <ul>
+          ${notes.highlights.map(item => `<li>${item}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+  
+  if (notes.bugFixes && notes.bugFixes.length > 0) {
+    html += `
+      <div class="whats-new-section">
+        <h4>🐛 Bug Fixes</h4>
+        <ul>
+          ${notes.bugFixes.map(item => `<li>${item}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+  
+  if (notes.notes) {
+    html += `
+      <div class="whats-new-notes">
+        ${notes.notes}
+      </div>
+    `;
+  }
+  
+  whatsNewBody.innerHTML = html;
+}
+
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+}
+
+async function markVersionAsSeen(version) {
+  try {
+    await fetch('/api/version-seen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version })
+    });
+  } catch (error) {
+    console.error('Error marking version as seen:', error);
+  }
+}
+
+// What's New modal close handlers
+whatsNewCloseBtn.addEventListener('click', async () => {
+  const versionElement = whatsNewBody.querySelector('.whats-new-version');
+  if (versionElement) {
+    const version = versionElement.textContent.replace('Version ', '');
+    await markVersionAsSeen(version);
+  }
+  whatsNewModal.style.display = 'none';
+});
+
+document.querySelectorAll('#whats-new-modal .modal-close').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const versionElement = whatsNewBody.querySelector('.whats-new-version');
+    if (versionElement) {
+      const version = versionElement.textContent.replace('Version ', '');
+      await markVersionAsSeen(version);
+    }
+    whatsNewModal.style.display = 'none';
+  });
+});
+
+// Close modal when clicking outside
+whatsNewModal.addEventListener('click', async (e) => {
+  if (e.target === whatsNewModal) {
+    const versionElement = whatsNewBody.querySelector('.whats-new-version');
+    if (versionElement) {
+      const version = versionElement.textContent.replace('Version ', '');
+      await markVersionAsSeen(version);
+    }
+    whatsNewModal.style.display = 'none';
+  }
+});
+
 // Start the app
 init();
+
+// Check for what's new after a short delay to let the app initialize
+setTimeout(() => {
+  checkAndShowWhatsNew();
+}, 1000);

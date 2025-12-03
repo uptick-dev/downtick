@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
@@ -62,7 +62,7 @@ autoUpdater.on('update-downloaded', (info) => {
   dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: 'Update Ready',
-    message: `Version ${info.version} has been downloaded. The app will restart to install the update.`,
+    message: `Version ${info.version} has been downloaded. The app will restart to install the update. You'll see what's new when it reopens!`,
     buttons: ['Restart Now', 'Later'],
     defaultId: 0
   }).then((result) => {
@@ -199,6 +199,26 @@ function createWindow() {
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools();
   }
+
+  // Intercept external links and open them in default browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Open external URLs in default browser
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  // Handle navigation to external URLs
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // Allow navigation within the app
+    if (url.startsWith(`http://localhost:${serverPort}`)) {
+      return;
+    }
+    // Open external URLs in default browser and prevent navigation
+    event.preventDefault();
+    shell.openExternal(url);
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;

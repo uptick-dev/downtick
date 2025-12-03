@@ -1,11 +1,11 @@
 {
   "name": "downtick",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Downtick - Analytics Reporter",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "server": "node standalone-server.js",
+    "start": "SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-} electron .",
+    "server": "SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-} node standalone-server.js",
     "build:mac": "./create-macos-app.sh",
     "build:electron": "electron-builder --mac",
     "build:electron-universal": "electron-builder --mac --universal",
