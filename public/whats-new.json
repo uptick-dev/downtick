@@ -1,4 +1,18 @@
 {
+  "1.2.0": {
+    "version": "1.2.0",
+    "date": "2024-12-04",
+    "title": "Version 1.2.0 - What's New",
+    "highlights": [
+      "Changed the calculation of weekly and monthly variances.",
+      "Weekly variances will now show only if Week 2 to Week 3 Variance exceeds the threshold.",
+      "Monthly variances will now show if any of the following exceeds the threshold: Month Month 2→3, Month 3→Current (MTD), or Month 2→Current (MTD)",
+      "Added a tooltip to those reports' Max Variance values, indicating which variance is shown."
+      "Added a link in those reports to hide positive variances (since now many more sites will show)."
+    ]
+  }
+},
+{
   "1.1.1": {
     "version": "1.1.1",
     "date": "2024-12-03",
