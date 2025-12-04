@@ -8,8 +8,10 @@ const screens = {
 let currentReport = 'weekly-variance';
 let varianceReportData = null;
 let varianceSortOrder = 'desc'; // 'desc' = highest absolute variance first (default), 'asc' = lowest first
+let varianceHidePositive = false; // Track if positive variances are hidden
 let monthlyVarianceReportData = null;
 let monthlyVarianceSortOrder = 'desc';
+let monthlyVarianceHidePositive = false; // Track if positive variances are hidden
 let lowRPVReportData = null;
 let lowRPVSortOrder = 'desc'; // 'desc' = largest drop first (default), 'asc' = smallest drop first
 let currentThreshold = 10; // Default variance threshold percentage
@@ -240,10 +242,11 @@ async function loadReport(reportType = currentReport, forceRefresh = false) {
   }
 }
 
-function renderVarianceReport(data, sortOrder = 'desc') {
+function renderVarianceReport(data, sortOrder = 'desc', hidePositive = false) {
   // Store data for re-sorting
   varianceReportData = data;
   varianceSortOrder = sortOrder;
+  varianceHidePositive = hidePositive;
   
   // Debug: Log the received data
   console.log('Report data received:', data);
@@ -265,6 +268,9 @@ function renderVarianceReport(data, sortOrder = 'desc') {
   console.log('Week labels:', { week1Label, week2Label, week3Label });
 
   let html = `
+    <div class="variance-filter-container">
+      <a href="#" id="variance-toggle-link" class="variance-toggle-link">${hidePositive ? 'Show' : 'Hide'} positive variances</a>
+    </div>
     <table>
       <thead>
         <tr>
@@ -280,13 +286,18 @@ function renderVarianceReport(data, sortOrder = 'desc') {
   `;
   
   // Sort sites based on current sort order
-  const sortedSites = [...data.sites].sort((a, b) => {
+  let sortedSites = [...data.sites].sort((a, b) => {
     if (sortOrder === 'desc') {
       return Math.abs(b.maxVariance) - Math.abs(a.maxVariance);
     } else {
       return Math.abs(a.maxVariance) - Math.abs(b.maxVariance);
     }
   });
+
+  // Filter out positive variances if hidePositive is true
+  if (hidePositive) {
+    sortedSites = sortedSites.filter(site => site.maxVariance <= 0);
+  }
 
   sortedSites.forEach(site => {
     // Debug: log views data
@@ -296,6 +307,14 @@ function renderVarianceReport(data, sortOrder = 'desc') {
     const varianceSymbol = site.maxVariance > 0 ? '+' : '';
     const sparkline = generateSparkline([site.week1Value, site.week2Value, site.week3Value], site.maxVariance > 0);
     
+    // Build tooltip showing both week-over-week changes (optional enhancement)
+    let tooltipText = '';
+    if (site.variance1to2 !== undefined && site.variance2to3 !== undefined) {
+      const var1to2 = site.variance1to2;
+      const var2to3 = site.variance2to3;
+      tooltipText = `Week 1→2: ${var1to2 > 0 ? '+' : ''}${var1to2.toFixed(1)}%\nWeek 2→3: ${var2to3 > 0 ? '+' : ''}${var2to3.toFixed(1)}% (shown)`;
+    }
+    
     html += `
       <tr>
         <td><strong>${escapeHtml(site.siteName)}</strong></td>
@@ -303,7 +322,7 @@ function renderVarianceReport(data, sortOrder = 'desc') {
         <td class="rpv-cell" data-views="Views: ${formatViews(site.week1Views)}">${formatNumber(site.week1Value)}</td>
         <td class="rpv-cell" data-views="Views: ${formatViews(site.week2Views)}">${formatNumber(site.week2Value)}</td>
         <td class="rpv-cell" data-views="Views: ${formatViews(site.week3Views)}">${formatNumber(site.week3Value)}</td>
-        <td class="${varianceClass}">${varianceSymbol}${site.maxVariance.toFixed(1)}%</td>
+        <td class="${varianceClass} variance-cell" data-variance="${tooltipText}">${varianceSymbol}${site.maxVariance.toFixed(1)}%</td>
       </tr>
     `;
   });
@@ -325,15 +344,25 @@ function renderVarianceReport(data, sortOrder = 'desc') {
   if (sortHeader) {
     sortHeader.addEventListener('click', () => {
       const newSortOrder = varianceSortOrder === 'desc' ? 'asc' : 'desc';
-      renderVarianceReport(varianceReportData, newSortOrder);
+      renderVarianceReport(varianceReportData, newSortOrder, varianceHidePositive);
+    });
+  }
+  
+  // Add click handler for toggle link
+  const toggleLink = document.getElementById('variance-toggle-link');
+  if (toggleLink) {
+    toggleLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      renderVarianceReport(varianceReportData, varianceSortOrder, !varianceHidePositive);
     });
   }
 }
 
-function renderMonthlyVarianceReport(data, sortOrder = 'desc') {
+function renderMonthlyVarianceReport(data, sortOrder = 'desc', hidePositive = false) {
   // Store data for re-sorting
   monthlyVarianceReportData = data;
   monthlyVarianceSortOrder = sortOrder;
+  monthlyVarianceHidePositive = hidePositive;
   
   // Format month ranges for display
   const formatMonthRange = (range) => {
@@ -360,6 +389,9 @@ function renderMonthlyVarianceReport(data, sortOrder = 'desc') {
   const monthCurrentLabel = data.monthRanges?.monthCurrent ? formatMonthRange(data.monthRanges.monthCurrent) : 'Current MTD';
 
   let html = `
+    <div class="variance-filter-container">
+      <a href="#" id="monthly-variance-toggle-link" class="variance-toggle-link">${hidePositive ? 'Show' : 'Hide'} positive variances</a>
+    </div>
     <table>
       <thead>
         <tr>
@@ -376,7 +408,7 @@ function renderMonthlyVarianceReport(data, sortOrder = 'desc') {
   `;
   
   // Sort sites based on current sort order
-  const sortedSites = [...data.sites].sort((a, b) => {
+  let sortedSites = [...data.sites].sort((a, b) => {
     if (sortOrder === 'desc') {
       return Math.abs(b.maxVariance) - Math.abs(a.maxVariance);
     } else {
@@ -384,10 +416,32 @@ function renderMonthlyVarianceReport(data, sortOrder = 'desc') {
     }
   });
 
+  // Filter out positive variances if hidePositive is true
+  if (hidePositive) {
+    sortedSites = sortedSites.filter(site => site.maxVariance <= 0);
+  }
+
   sortedSites.forEach(site => {
     const varianceClass = site.maxVariance > 0 ? 'variance-positive' : 'variance-negative';
     const varianceSymbol = site.maxVariance > 0 ? '+' : '';
     const sparkline = generateSparkline([site.month1Value, site.month2Value, site.month3Value, site.monthCurrentValue], site.maxVariance > 0);
+    
+    // Build tooltip showing all month-over-month changes
+    let tooltipText = '';
+    if (site.variance2to3 !== undefined && site.variance3toCurrent !== undefined && site.variance2toCurrent !== undefined) {
+      const var2to3 = site.variance2to3;
+      const var3toCurrent = site.variance3toCurrent;
+      const var2toCurrent = site.variance2toCurrent;
+      
+      // Determine which variance is being shown
+      const shownVariance = Math.abs(site.maxVariance);
+      let shownLabel = '';
+      if (Math.abs(var2to3) === shownVariance) shownLabel = ' (shown)';
+      else if (Math.abs(var3toCurrent) === shownVariance) shownLabel = ' (shown)';
+      else if (Math.abs(var2toCurrent) === shownVariance) shownLabel = ' (shown)';
+      
+      tooltipText = `Month 2→3: ${var2to3 > 0 ? '+' : ''}${var2to3.toFixed(1)}%${Math.abs(var2to3) === shownVariance ? shownLabel : ''}\nMonth 3→Current: ${var3toCurrent > 0 ? '+' : ''}${var3toCurrent.toFixed(1)}%${Math.abs(var3toCurrent) === shownVariance ? shownLabel : ''}\nMonth 2→Current: ${var2toCurrent > 0 ? '+' : ''}${var2toCurrent.toFixed(1)}%${Math.abs(var2toCurrent) === shownVariance ? shownLabel : ''}`;
+    }
     
     html += `
       <tr>
@@ -397,7 +451,7 @@ function renderMonthlyVarianceReport(data, sortOrder = 'desc') {
         <td class="rpv-cell" data-views="Views: ${formatViews(site.month2Views)}">${formatNumber(site.month2Value)}</td>
         <td class="rpv-cell" data-views="Views: ${formatViews(site.month3Views)}">${formatNumber(site.month3Value)}</td>
         <td class="rpv-cell" data-views="Views: ${formatViews(site.monthCurrentViews)}">${formatNumber(site.monthCurrentValue)}</td>
-        <td class="${varianceClass}">${varianceSymbol}${site.maxVariance.toFixed(1)}%</td>
+        <td class="${varianceClass} variance-cell" data-variance="${tooltipText}">${varianceSymbol}${site.maxVariance.toFixed(1)}%</td>
       </tr>
     `;
   });
@@ -419,7 +473,16 @@ function renderMonthlyVarianceReport(data, sortOrder = 'desc') {
   if (sortHeader) {
     sortHeader.addEventListener('click', () => {
       const newSortOrder = monthlyVarianceSortOrder === 'desc' ? 'asc' : 'desc';
-      renderMonthlyVarianceReport(monthlyVarianceReportData, newSortOrder);
+      renderMonthlyVarianceReport(monthlyVarianceReportData, newSortOrder, monthlyVarianceHidePositive);
+    });
+  }
+  
+  // Add click handler for toggle link
+  const toggleLink = document.getElementById('monthly-variance-toggle-link');
+  if (toggleLink) {
+    toggleLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      renderMonthlyVarianceReport(monthlyVarianceReportData, monthlyVarianceSortOrder, !monthlyVarianceHidePositive);
     });
   }
 }
