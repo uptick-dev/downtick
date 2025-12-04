@@ -283,7 +283,6 @@ tr:hover {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  border-top: 1px solid #3a3a3a;
   color: #a1a1a6;
   font-size: 14px;
 }
@@ -407,6 +406,44 @@ tr:hover {
   pointer-events: none;
 }
 
+/* Variance cell tooltip */
+.variance-cell {
+  position: relative;
+  cursor: default;
+}
+
+.variance-cell:hover::after {
+  content: attr(data-variance);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: pre-line;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  min-width: 180px;
+  text-align: left;
+}
+
+.variance-cell:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #000;
+  z-index: 1000;
+  pointer-events: none;
+}
+
 /* Threshold control */
 .threshold-control {
   display: flex;
@@ -452,6 +489,27 @@ tr:hover {
 .threshold-suffix {
   font-size: 13px;
   color: #a1a1a6;
+}
+
+/* Variance filter toggle */
+.variance-filter-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.variance-toggle-link {
+  color: #0071e3;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.variance-toggle-link:hover {
+  color: #0077ed;
+  text-decoration: underline;
 }
 
 /* Modal styles */

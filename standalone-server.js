@@ -727,6 +727,8 @@ class ReportGenerator {
           week2Views: this.parseValue(weeks.week2.views),
           week3Views: this.parseValue(weeks.week3.views),
           maxVariance: varianceData.maxVariance,
+          variance1to2: varianceData.variance1to2,
+          variance2to3: varianceData.variance2to3,
           metric
         });
       }
@@ -790,6 +792,10 @@ class ReportGenerator {
           month3Views: this.parseValue(months.month3.views),
           monthCurrentViews: this.parseValue(months.monthCurrent.views),
           maxVariance: varianceData.maxVariance,
+          variance1to2: varianceData.variance1to2,
+          variance2to3: varianceData.variance2to3,
+          variance3toCurrent: varianceData.variance3toCurrent,
+          variance2toCurrent: varianceData.variance2toCurrent,
           metric
         });
       }
@@ -846,34 +852,56 @@ class ReportGenerator {
     const month3Value = this.parseValue(months.month3[metric]);
     const monthCurrentValue = this.parseValue(months.monthCurrent[metric]);
 
-    // Calculate consecutive month-over-month variances
+    // Calculate all relevant month-over-month variances
     let variance1to2 = 0;
     let variance2to3 = 0;
     let variance3toCurrent = 0;
+    let variance2toCurrent = 0; // Direct Month 2→Current
 
     if (month1Value > 0) {
       variance1to2 = ((month2Value - month1Value) / month1Value) * 100;
     }
     if (month2Value > 0) {
       variance2to3 = ((month3Value - month2Value) / month2Value) * 100;
+      variance2toCurrent = ((monthCurrentValue - month2Value) / month2Value) * 100;
     }
     if (month3Value > 0) {
       variance3toCurrent = ((monthCurrentValue - month3Value) / month3Value) * 100;
     }
 
-    // Check if last 3 variances are in the same direction (all positive or all negative)
-    // and all exceed the threshold
-    let maxVariance = 0;
+    // FLEXIBLE LOGIC: Show if ANY of these transitions exceeds threshold:
+    // - Month 2→3
+    // - Month 3→Current
+    // - Month 2→Current
+    const absVar2to3 = Math.abs(variance2to3);
+    const absVar3toCurrent = Math.abs(variance3toCurrent);
+    const absVar2toCurrent = Math.abs(variance2toCurrent);
     
-    if (variance1to2 > this.threshold && variance2to3 > this.threshold && variance3toCurrent > this.threshold) {
-      // Consistent upward trend
-      maxVariance = Math.max(variance1to2, variance2to3, variance3toCurrent);
-    } else if (variance1to2 < -this.threshold && variance2to3 < -this.threshold && variance3toCurrent < -this.threshold) {
-      // Consistent downward trend
-      maxVariance = Math.min(variance1to2, variance2to3, variance3toCurrent);
+    const maxAbsVariance = Math.max(absVar2to3, absVar3toCurrent, absVar2toCurrent);
+    
+    let maxVariance = 0;
+    if (maxAbsVariance > this.threshold) {
+      // Use the variance with the largest absolute value, preserving its sign
+      if (absVar2to3 === maxAbsVariance) {
+        maxVariance = variance2to3;
+      } else if (absVar3toCurrent === maxAbsVariance) {
+        maxVariance = variance3toCurrent;
+      } else {
+        maxVariance = variance2toCurrent;
+      }
     }
 
-    return { month1Value, month2Value, month3Value, monthCurrentValue, maxVariance };
+    return { 
+      month1Value, 
+      month2Value, 
+      month3Value, 
+      monthCurrentValue, 
+      maxVariance,
+      variance1to2,
+      variance2to3,
+      variance3toCurrent,
+      variance2toCurrent
+    };
   }
 
   async generateLowRPVReport() {
@@ -1048,19 +1076,18 @@ class ReportGenerator {
       variance2to3 = ((week3Value - week2Value) / week2Value) * 100;
     }
 
-    // Check if both variances are in the same direction (both positive or both negative)
-    // and both exceed the threshold
-    let maxVariance = 0;
-    
-    if (variance1to2 > this.threshold && variance2to3 > this.threshold) {
-      // Consistent upward trend
-      maxVariance = Math.max(variance1to2, variance2to3);
-    } else if (variance1to2 < -this.threshold && variance2to3 < -this.threshold) {
-      // Consistent downward trend
-      maxVariance = Math.min(variance1to2, variance2to3);
-    }
+    // SIMPLIFIED LOGIC: Only Week 2→3 variance matters
+    // Week 1 is just for context/display
+    const maxVariance = variance2to3;
 
-    return { week1Value, week2Value, week3Value, maxVariance };
+    return { 
+      week1Value, 
+      week2Value, 
+      week3Value, 
+      maxVariance,
+      variance1to2,
+      variance2to3
+    };
   }
 
   parseValue(value) {
